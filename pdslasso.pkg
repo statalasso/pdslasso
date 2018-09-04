@@ -1,0 +1,8 @@
+v 3
+d PDSLASSO: Stata module for post-selection and post-regularization OLS or IV estimation and inference
+d Achim Ahrens, Mark E Schaffer, Christian B Hansen
+f pdslasso.sthlp
+f pdslasso.ado
+f ivlasso_p.ado
+f ivlasso.sthlp
+f ivlasso.ado
