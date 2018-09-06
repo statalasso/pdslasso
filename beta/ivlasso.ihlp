@@ -198,6 +198,7 @@ All varlists may contain time-series operators or factor variables; see help var
 {phang}{help ivlasso##saved_results:Saved results}{p_end}
 {phang}{help ivlasso##references:References}{p_end}
 {phang}{help ivlasso##website:Website}{p_end}
+{phang}{help ivlasso##installation:Installation}{p_end}
 {phang}{help ivlasso##acknowledgements:Acknowledgements}{p_end}
 {phang}{help ivlasso##citation:Citation of pdslasso and ivlasso}{p_end}
 
@@ -745,10 +746,16 @@ The Frisch-Waugh-Lovell Theorem for the lasso and the ridge regression.
 {pstd}
 Please check our website {browse "https://statalasso.github.io/"} for more information. 
 
+{marker installation}{title:Installation}
+
+{pstd}
+To get the latest stable version of {it:lassopack} and {it:pdslasso} from our website, 
+check the installation instructions at {browse "https://statalasso.github.io/installation/"}.
+We update the website versions more frequently than the SSC version.
+
 {marker acknowledgements}{title:Acknowledgements}
 
 {pstd}Thanks to Sergio Correia for advice on the use of the FTOOLS package.{p_end}
-
 
 {marker citation}{...}
 {title:Citation of pdslasso and ivlasso}
