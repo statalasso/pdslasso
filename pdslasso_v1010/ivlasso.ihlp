@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 1.0.08  09aug2018}{...}
+{* *! version 1.0.09  12sept2018}{...}
 {cmd:help pdslasso, help ivlasso}
 {hline}
 
@@ -535,20 +535,23 @@ some time to run on some installations.{p_end}
 {phang2}. {stata "clear"}{p_end}
 {phang2}. {browse "https://economics.mit.edu/files/397":(click to download asciiqob.zip from economics.mit.edu)}{p_end}
 {phang2}. {stata "unzipfile asciiqob.zip"}{p_end}
-{phang2}. {stata "infix lnwage 1-9 educ 10-20 yob 21-31 qob 32-42 pob 43-53 using asciiqob.txt"}{p_end}
+{phang2}. {stata "infix lnwage 1-9 edu 10-20 yob 21-31 qob 32-42 pob 43-53 using asciiqob.txt"}{p_end}
+{pstd}Alternative source (no unzipping needed):{p_end}
+{phang2}. {stata "use https://statalasso.github.io/dta/AK91.dta""}{p_end}
+{pstd}xtset data by place of birth (state):{p_end}
 {phang2}. {stata "xtset pob"}{p_end}
 
 {pstd}Table VII (1930-39) col 2. Year and state of birth = yob & pob.{p_end}
-{phang2}. {stata "ivregress 2sls lnwage i.pob i.yob (educ=i.qob i.yob#i.qob i.pob#i.qob)"}{p_end}
+{phang2}. {stata "ivregress 2sls lnwage i.pob i.yob (edu=i.qob i.yob#i.qob i.pob#i.qob)"}{p_end}
 
 {pstd}Fixed effects; select year controls and IVs; IVs are QOB and QOBxYOB.{p_end}
-{phang2}. {stata "ivlasso lnwage (i.yob) (educ=i.qob i.yob#i.qob), fe"}{p_end}
+{phang2}. {stata "ivlasso lnwage (i.yob) (edu=i.qob i.yob#i.qob), fe"}{p_end}
 
 {pstd}Fixed effects; select year controls and IVs; IVs are QOB, QOBxYOB, QOBxSOB.{p_end}
-{phang2}. {stata "ivlasso lnwage (i.yob) (educ=i.qob i.yob#i.qob i.pob#i.qob), fe"}{p_end}
+{phang2}. {stata "ivlasso lnwage (i.yob) (edu=i.qob i.yob#i.qob i.pob#i.qob), fe"}{p_end}
 
 {pstd}All dummies & interactions incl. base levels.{p_end}
-{phang2}. {stata "ivlasso lnwage (i.yob) (educ=ibn.qob ibn.yob#ibn.qob ibn.pob#ibn.qob), fe"}{p_end}
+{phang2}. {stata "ivlasso lnwage (i.yob) (edu=ibn.qob ibn.yob#ibn.qob ibn.pob#ibn.qob), fe"}{p_end}
 
 {title:Example using data from Belloni et al. ({helpb ivlasso##BCH2015:2015})}
 
