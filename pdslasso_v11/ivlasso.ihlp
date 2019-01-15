@@ -1,6 +1,7 @@
 {smcl}
 {* *! version 1.0.11  15jan2019}{...}
-{cmd:help pdslasso, help ivlasso}
+{hline}
+{cmd:help pdslasso, help ivlasso}{right: pdslasso v1.1}
 {hline}
 
 {title:Title}
@@ -762,6 +763,11 @@ Please check our website {browse "https://statalasso.github.io/"} for more infor
 To get the latest stable version of {it:lassopack} and {it:pdslasso} from our website, 
 check the installation instructions at {browse "https://statalasso.github.io/installation/"}.
 We update the website versions more frequently than the SSC version.
+
+{pstd}
+To verify that {it:pdslasso} is correctly installed, 
+click on or type {stata "whichpkg pdslasso"} (which requires {helpb whichpkg}
+to be installed; {stata "ssc install whichpkg"}).
 
 {marker acknowledgements}{title:Acknowledgements}
 
