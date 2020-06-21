@@ -1,5 +1,5 @@
-*! ivlasso 1.0.10 08nov2018
-*! pdslasso package 1.0.10 08nov2018
+*! ivlasso 1.0.12 14jan2019
+*! pdslasso package 1.1.1 21june2020
 *! authors aa/cbh/ms
 * ivlasso:		main program
 * s_ivparse:	Mata basic parse of IV-type lists (endog, dexog, exexog, xctrl)
@@ -32,6 +32,15 @@
 * 1.0.10  (08nov2018)
 *         Fixed bug in sscset error check added in 1.0.09.
 *         Added package version number.
+* 1.0.11  (11dec2018)
+*         Now allows partial+nocons.
+*         Fixed bug in rlasso option + multiple d variables - would save only the last rlasso 
+* 1.0.12  (14jan2019)
+*         strrpos() unavailable in Stata 13 so replaced with strpos(strreverse(.)) in s_ivparse.
+*         Updated ssgamma/gamma/gammad options to be in line with new rlasso usage; gammad retired.
+*         Bug fix - FE + weights would fail if data were not sorted on xtset panel var.
+*         Bug fix - FE with full regressor set + weights not weighted correctly unless also partialling-out.
+*         Bug fix - if no IVs selected, could crash when obtaining PDS coefs.
 
 program define ivlasso, eclass					//  sortpreserve handled in _ivlasso
 	syntax [anything] [if] [in] [aw pw],		/// note no "/" after pw
@@ -41,7 +50,7 @@ program define ivlasso, eclass					//  sortpreserve handled in _ivlasso
 		* ]
 	
 	version 13
-	local lversion 1.0.10
+	local lversion 1.0.12
 	local pversion 1.0.10
 	if "`version'" != "" {							//  Report program version number, then exit.
 		di in gr "ivlasso version `lversion'"
@@ -337,6 +346,13 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 		else {
 			local ivar	`r(ivar)'
 		}
+		// fe transformation may expect data to be sorted on ivar
+		local sortvar	: sortedby
+		local sortvar	: word 1 of `sortvar'				// in case sorted on multiple variables
+		if "`ivar'"~="`sortvar'" {
+			di as text "(sorting by xtset panelvar `ivar')"
+			sort `ivar'
+		}
 	}
 	*
 
@@ -359,10 +375,6 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 	// conmodel: constant in original model
 	// consflag: constant in transformed equation to estimate
 	// dmflag:   treat data as zero-mean
-	if "`partial'"~="" & "`noconstant'"~="" {
-		di as err "error: incompatible options, partial and nocons"
-		exit 198
-	}
 	if `weightflag' & ("`noconstant'"~="") {
 		// incompatible options - with weights, must have a constant to partial out or remove by FE
 		di as err "incompatible options - weights + noconstant"
@@ -386,13 +398,17 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 	else {
 		local consflag	1
 	}
-	// tell estimation code to treat data as zero-mean; user can force this with dm option
-	// note that prestandardized data should be treated as zero-mean only if a constant is present in the model
-	if `feflag' | `partialflag' | ("`dm'"~="") {
+	if "`dm'"~="" {
+		// dmflag tells estimation code to treat data as zero-mean; user can force this with dm option
 		local dmflag	1
 	}
-	else {
+	else if `consmodel' {
+		// model has an constant that will be partialled out or treated as unpenalized
 		local dmflag	0
+	}
+	else {
+		// special case - nocons and no FEs means treat vars as if demeaned
+		local dmflag	1
 	}
 	// "_cons" allowed as an argument to partial(.) - remove it
 	local partial		: subinstr local partial "_cons" "", all word count(local pconscount)
@@ -747,9 +763,9 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 		local N_g	=r(N_g)									//  N_g will be 0 if no FEs
 		local noftools `r(noftools)'						//  either not installed or user option
 		local dofopt "dofminus(`N_g')"						//  to pass to post-lasso estimation; empty if no FEs
+		preserve											//  preserve the original values of tempvars
 		// then partial out any additional X vars	
 		if `xpartialflag' {
-			preserve										//  preserve the original values of tempvars
 			_partial `allbutxpartial_t',					/// transform the tempvars
 							touse(`touse')					///
 							partial(`xpartial_t')			/// partial out X vars only; xpartial_t vars are FE-transformed
@@ -772,7 +788,7 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 						partial(`xpartial_f')				/// partial out X vars only; xpartial_f have FV and TS vars replaced with temps
 						tvarlist(`allbutxpartial_t')		/// overwrite/initialize these
 						wvar(`wvar')						///
-						dmflag(0)							//  data not yet demeaned
+						dmflag(`dmflag')					//  treat data as not yet demeaned unless nocons
 		// then transform variables by weighting if requested
 		if `weightflag' {
 			_wt `allbutxpartial_t',							/// don't need to transform the partialling vars since
@@ -818,16 +834,13 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 					debugflag(`debugflag')		///
 					lsconsflag(`lsconsflag')	///
 					dmflag(`dmflag')			///
-					`qui'
+					`qui'						///
+					step(1)						///
+					rlassoflag(`rlassoflag')	///
+					rlassoprefix(`rlassoprefix')
 	local xselected1_o	`r(allselected0_o)'
-	if `rlassoflag' & "`xhighdim_o'`xnotpen_o'"~="" {
-		capture est store `rlassoprefix'_step1, title("lasso step 1")
-		if _rc > 0 {
-			di as text "Warning: unable to store lasso estimation"
-		}
-		else {
-			local rlassolist `rlassolist' `rlassoprefix'_step1
-		}
+	if `rlassoflag' {
+		local rlassolist `rlassolist' `r(rlassolist)'
 	}
 	*
 
@@ -856,16 +869,13 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 						debugflag(`debugflag')		///
 						lsconsflag(`lsconsflag')	///
 						dmflag(`dmflag')			///
-						`qui'
+						`qui'						///
+						step(2)						///
+						rlassoflag(`rlassoflag')	///
+						rlassoprefix(`rlassoprefix')
 		local xselected2_o	`r(allselected0_o)'
-		if `rlassoflag' & "`xhighdim_o'`xnotpen_o'"~="" {
-			capture est store `rlassoprefix'_step2, title("lasso step 2")
-			if _rc > 0 {
-				di as text "Warning: unable to store lasso estimation"
-			}
-			else {
-				local rlassolist `rlassolist' `rlassoprefix'_step2
-			}
+		if `rlassoflag' {
+			local rlassolist `rlassolist' `r(rlassolist)'
 		}
 	}
 	*
@@ -893,16 +903,13 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 						debugflag(`debugflag')		///
 						lsconsflag(`lsconsflag')	///
 						dmflag(`dmflag')			///
-						`qui'
+						`qui'						///
+						step(3)						///
+						rlassoflag(`rlassoflag')	///
+						rlassoprefix(`rlassoprefix')
 		local xselected3_o	`r(allselected0_o)'
-		if `rlassoflag' & "`xhighdim_o'`xnotpen_o'"~="" {
-			capture est store `rlassoprefix'_step3, title("lasso step 3")
-			if _rc > 0 {
-				di as text "Warning: unable to store lasso estimation"
-			}
-			else {
-				local rlassolist `rlassolist' `rlassoprefix'_step3
-			}
+		if `rlassoflag' {
+			local rlassolist `rlassolist' `r(rlassolist)'
 		}
 	}
 	*
@@ -932,16 +939,13 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 						debugflag(`debugflag')					///
 						lsconsflag(`lsconsflag')				///
 						dmflag(`dmflag')						///
-						`qui'
+						`qui'									///
+						step(4)									///
+						rlassoflag(`rlassoflag')				///
+						rlassoprefix(`rlassoprefix')
 		local xselected4_o	`r(allselected0_o)'
-		if `rlassoflag' & "`xhighdim_o'`xnotpen_o'"~="" {
-			capture est store `rlassoprefix'_step4, title("lasso step 4")
-			if _rc > 0 {
-				di as text "Warning: unable to store lasso estimation"
-			}
-			else {
-				local rlassolist `rlassolist' `rlassoprefix'_step4
-			}
+		if `rlassoflag' {
+			local rlassolist `rlassolist' `r(rlassolist)'
 		}
 	}
 	*
@@ -988,16 +992,13 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 						debugflag(`debugflag')					///
 						lsconsflag(`lsconsflag')				///
 						dmflag(`dmflag')						///
-						`qui'
+						`qui'									///
+						step(5)									///
+						rlassoflag(`rlassoflag')				///
+						rlassoprefix(`rlassoprefix')
 		local zselected5_o	`r(allselected0_o)'
-		if `rlassoflag' & "`xhighdim_o'`zhighdim_o'`xnotpen_o'`znotpen_o'`zpartial_o'"~="" {
-			capture est store `rlassoprefix'_step5, title("lasso step 5")
-			if _rc > 0 {
-				di as text "Warning: unable to store lasso estimation"
-			}
-			else {
-				local rlassolist `rlassolist' `rlassoprefix'_step5
-			}
+		if `rlassoflag' {
+			local rlassolist `rlassolist' `r(rlassolist)'
 		}
 	}
 	*
@@ -1027,16 +1028,13 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 						debugflag(`debugflag')				///
 						lsconsflag(`lsconsflag')			///
 						dmflag(`dmflag')					///
-						`qui'
+						`qui'								///
+						step(6a)							///
+						rlassoflag(`rlassoflag')			///
+						rlassoprefix(`rlassoprefix')
 		local xselected6a_o		`r(allselected0_o)'
-		if `rlassoflag' & "`xhighdim_o'`xnotpen_o'"~="" {
-			capture est store `rlassoprefix'_step6a, title("lasso step 6a")
-			if _rc > 0 {
-				di as text "Warning: unable to store lasso estimation"
-			}
-			else {
-				local rlassolist `rlassolist' `rlassoprefix'_step6a
-			}
+		if `rlassoflag' {
+			local rlassolist `rlassolist' `r(rlassolist)'
 		}
 	}
 	if "`dendog_o'" ~= "" {
@@ -1061,16 +1059,13 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 						debugflag(`debugflag')				///
 						lsconsflag(`lsconsflag')			///
 						dmflag(`dmflag')					///
-						`qui'
+						`qui'								///
+						step(6b)							///
+						rlassoflag(`rlassoflag')			///
+						rlassoprefix(`rlassoprefix')
 		local xselected6b_o		`r(allselected0_o)'
-		if `rlassoflag' & "`xhighdim_o'`xnotpen_o'"~="" {
-			capture est store `rlassoprefix'_step6b, title("lasso step 6b")
-			if _rc > 0 {
-				di as text "Warning: unable to store lasso estimation"
-			}
-			else {
-				local rlassolist `rlassolist' `rlassoprefix'_step6b
-			}
+		if `rlassoflag' {
+			local rlassolist `rlassolist' `r(rlassolist)'
 		}
 	}
 	*
@@ -1364,8 +1359,8 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 
 	****************** PDS estimation with full regressor set *****************
 
-	if `feflag' & `xpartialflag' {					//  FE case and there are partialled-out notpen vars
-		restore										//  Restores dataset with tempvars after FE transform but before notpen partialled out
+	if `feflag' {									//  Restores dataset with tempvars after FE transform
+		restore										//  ... but before notpen (if any) were partialled out.
 	}
 	// xselected has all selected X except for xpartial, so need to add that
 	// zselected has all selected Z including notpen and partial, so nothing else needed
@@ -1869,6 +1864,9 @@ program define SelectControls, rclass
 		startcol(int 15)			///
 		qui							///
 		debugflag(int 0)			///
+		step(string)				///
+		rlassoflag(int 0)			///
+		rlassoprefix(string)		///
 		]
 	
 	// create flags etc., then syntax check
@@ -1923,6 +1921,15 @@ program define SelectControls, rclass
 									`noconstant'						///
 									`dm'								/// tell rlasso data are zero-mean
 									`loptions'
+			if `rlassoflag' & "`highdim_o'`notpen_o'"~="" {
+				capture est store `rlassoprefix'_step`step'_`var_o', title("lasso step `step'")
+				if _rc > 0 {
+					di as text "Warning: unable to store lasso estimation"
+				}
+				else {
+					local rlassolist `rlassolist' `rlassoprefix'_step`step'_`var_o'
+				}
+			}
 			mat `beta'				=e(beta)							//  rlasso saves row vectors
 			mat `betaOLS'			=e(betaOLS)							//  rlasso saves row vectors
 			local betavars_o		`e(selected0)'						//  e(selected0) macro INCLUDES PARTIAL, NOTPEN AND CONS
@@ -2025,6 +2032,7 @@ program define SelectControls, rclass
 	return local allselected0_o		`allselected0_o'						//  INCLUDING NOTPEN, PARTIAL, CONS
 	return scalar s					=`: word count `allselected_o''
 	return scalar s0				=`: word count `allselected0_o''
+	return local rlassolist			`rlassolist'
 
 end		// End program SelectControls
 
@@ -2179,8 +2187,8 @@ program define doregress, eclass
 	version 13
 	syntax varlist(numeric fv ts min=1 max=1) [if] [in],	/// dep var
 		regressors(varlist numeric fv ts min=1)				/// all regressors
-		instruments(varlist numeric fv ts min=1)			/// all exogenous
 		[													///
+		instruments(varlist numeric fv ts min=1)			/// all exogenous; may be empty if not identified
 		dict_o(string)										/// original varnames
 		dict_t(string)										/// temporary varnames
 		consflag(int 1)										/// flag for constant
@@ -2215,7 +2223,7 @@ program define doregress, eclass
 	 	if `touse',										///
 	 	`noconstant'									///
 		`options'
-	
+
 	// eqn identified
 	if _rc==0 {
 		if `debugflag' {
@@ -2377,20 +2385,15 @@ program define doSupScore, rclass
 			exit 198
 		}
 		
-		// trick to parse the lasso options
-		local 0 ", `loptions'"
-		// this strips out gamma and gammad options in loptions macro
-		// and leaves remainder in macro `options'
-		syntax [, gamma(real 0.05) gammad(real 1) * ]
 		// set options for rlasso
 		if `sssimulateflag' {
-			local ssoptions		testonly gamma(`ssgamma') `options'
+			local ssoptions		testonly ssgamma(`ssgamma') `loptions'
 		}
 		else if `ssaboundflag' {
-			local ssoptions		testonly ssnumsim(0) gamma(`ssgamma') `options'
+			local ssoptions		testonly ssnumsim(0) ssgamma(`ssgamma') `loptions'
 		}
 		else if `ssselectflag' {
-			local ssoptions		gamma(`ssgamma') gammad(1) `options'
+			local ssoptions		ssgamma(`ssgamma') `loptions'
 		}
 		else {
 			di as err "error - internal ivlasso sup-score error"
@@ -3461,7 +3464,9 @@ void s_ivparse(string scalar cmdline)
 			
 			if (strpos(pclause,"=")) {
 				epos	= strpos(pclause,"=")
-				epos2	= strrpos(pclause,"=")
+				// strrpos unavailable in Stata 13
+				// epos2	= strrpos(pclause,"=")
+				epos2	= strlen(pclause) - strpos(strreverse(pclause),"=") + 1
 				if (epos==epos2) {
 					dendog = dendog + substr(pclause, 1, epos-1)
 					exexog = exexog + substr(pclause, epos+1, .)

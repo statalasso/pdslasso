@@ -1,5 +1,5 @@
-*! ivlasso_p 1.0.00 26/09/2017
-*! pdslasso package 1.1 15jan2019
+*! ivlasso_p 1.2 21june2020
+*! pdslasso package 1.1.1 21june2020
 *! authors aa/cbh/ms
 * postestimation predict for ivlasso and pdslasso
 
@@ -27,7 +27,7 @@ program define ivlasso_p, rclass
 	}
 	*
 
-	if ("`e(cmd)'"~="ivlasso") & ("`e(cmd)'"~="pdlasso") {
+	if ("`e(cmd)'"~="ivlasso") & ("`e(cmd)'"~="pdslasso") {
 		di as err "error: ivlasso_p supports only ivlasso and pdslasso commands"
 		exit 198
 	}
