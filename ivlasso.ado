@@ -1,5 +1,5 @@
-*! ivlasso 1.0.12 14jan2019
-*! pdslasso package 1.1.1 21june2020
+*! ivlasso 1.1.01 28july2020
+*! pdslasso package 1.3 29july2020
 *! authors aa/cbh/ms
 * ivlasso:		main program
 * s_ivparse:	Mata basic parse of IV-type lists (endog, dexog, exexog, xctrl)
@@ -41,6 +41,17 @@
 *         Bug fix - FE + weights would fail if data were not sorted on xtset panel var.
 *         Bug fix - FE with full regressor set + weights not weighted correctly unless also partialling-out.
 *         Bug fix - if no IVs selected, could crash when obtaining PDS coefs.
+* 1.0.13  (08mar2019)
+*         Bug fix - check for rlasso install was clearing previous e(sample) and other stored results.
+*         Bug fix - was not storing intermediate results if endog regressors were factor variables.
+* 1.0.14  (11oct2019)
+*         Bug fix - for models with exogenous causal variables, no HD controls, a model constant, and no partialling-out,
+*         CHS estimates were incorrect because the causal variables were not being centered (partial out the constant).
+* 1.1.01  (date tbc)
+*         Updated to allow psolver option - choice of solver for partialling out.
+*         Warning issued if collinearities encountered when partialling out.
+*         Updated to allow full range of VCE options (HAC/AC, 2-way cluster-robust). Now requires ivreg2.
+*         Fixed bug in idstats - wasn't subtracting #FEs for non-cluster VCEs.
 
 program define ivlasso, eclass					//  sortpreserve handled in _ivlasso
 	syntax [anything] [if] [in] [aw pw],		/// note no "/" after pw
@@ -50,8 +61,8 @@ program define ivlasso, eclass					//  sortpreserve handled in _ivlasso
 		* ]
 	
 	version 13
-	local lversion 1.0.12
-	local pversion 1.0.10
+	local lversion 1.1.01
+	local pversion 1.3
 	if "`version'" != "" {							//  Report program version number, then exit.
 		di in gr "ivlasso version `lversion'"
 		di in gr "pdslasso package version `pversion'"
@@ -68,11 +79,20 @@ program define ivlasso, eclass					//  sortpreserve handled in _ivlasso
 	if ~replay() {									//  not replay so estimate
 
 		// check for rlasso (eclass-command) only when estimating anew
-		cap rlasso, version
+		// preferable to "cap rlasso, version" since no need to use _estimates hold
+		cap findfile rlasso.ado
 		if _rc != 0 {
 			di as err "Error: `cmdname' requires rlasso to run"
 			di as err "To install, type " _c
 			di in smcl "{stata ssc install rlasso :ssc install rlasso}"
+			exit 601
+		}
+		// ivreg2 is a necessary component
+		cap findfile ivreg2.ado
+		if _rc != 0 {
+			di as err "Error: `cmdname' requires ivreg2 to run"
+			di as err "To install, from within Stata type " _c
+			di in smcl "{stata ssc install ivreg2 :ssc install ivreg2}"
 			exit 601
 		}
 		mata: s_ivparse("`anything'")
@@ -284,8 +304,10 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 															///
 		NOIsily												///
 		NOCONStant											///
-		CLuster(varlist max=1)								/// shared option with lasso and IV estimation
+		CLuster(varlist max=2)								/// shared option with lasso and IV estimation
 		Robust												/// shared option with lasso and IV estimation
+		bw(int 0)											/// shared option with lasso and IV estimation
+		kernel(string)										/// shared option with lasso and IV estimation
 		sqrt												/// shared option with lasso and IV estimation
 		first												/// report first-stage regressions
 		idstats												/// report weak ID stats
@@ -307,7 +329,8 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 		cmdname(name)										/// ivlasso or pdslasso
 		debug												/// triggers debugging output and calcs
 		fvstrip												/// alternative undocumented parsing of factor vars
-		NOFTOOLS											/// provisional
+		NOFTOOLS											/// 
+		psolver(string)										/// optional choice of solver for partialling out
 		]
 
 	*** rlasso-specific
@@ -423,6 +446,8 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 	
 	*** Initialize N_clust=0; will be updated to >0 by estimating programs.
 	local N_clust	=0		//  Refers to IV/OLS #clusters (not lasso #clusters)
+	local N_clust1	=0
+	local N_clust2	=0
 	*
 
 	*** weights ***
@@ -451,11 +476,19 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 	if "`robust'" ~= "" {
 		local ivoptions		`ivoptions' robust
 		local loptions		`loptions' robust
+		local rkoptions		robust
 	}
 	// cluster
 	if "`cluster'" ~= "" {
 		local ivoptions		`ivoptions' cluster(`cluster')
 		local loptions		`loptions' cluster(`cluster')
+		local rkoptions		`rkoptions' cluster(`cluster')
+	}
+	// HAC/AC
+	if `bw' > 0 {
+		local ivoptions		`ivoptions' bw(`bw') kernel(`kernel')
+		local loptions		`loptions' bw(`bw') kernel(`kernel')
+		local rkoptions		`rkoptions' bw(`bw') kernel(`kernel')
 	}
 	// sqrt lasso
 	if "`sqrt'" ~= "" {
@@ -770,6 +803,7 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 							touse(`touse')					///
 							partial(`xpartial_t')			/// partial out X vars only; xpartial_t vars are FE-transformed
 							wvar(`wvar')					///
+							psolver(`psolver')				/// optional choice of solver
 							dmflag(1)						//  FE => data are already demeaned
 		}
 		// then transform variables by weighting if requested
@@ -788,6 +822,7 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 						partial(`xpartial_f')				/// partial out X vars only; xpartial_f have FV and TS vars replaced with temps
 						tvarlist(`allbutxpartial_t')		/// overwrite/initialize these
 						wvar(`wvar')						///
+						psolver(`psolver')					/// optional choice of solver
 						dmflag(`dmflag')					//  treat data as not yet demeaned unless nocons
 		// then transform variables by weighting if requested
 		if `weightflag' {
@@ -1249,13 +1284,13 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 	// regressors are xselected (including notpen, doesn't include X partials)
 	// and zselected (includes notpen, partial)
 	if `firstflag' {
+		local i 1
 		foreach var_t of varlist `dendog_t' {
 			matchnames "`var_t'" "`dict_t'" "`dict_o'"
 			local var_o			`r(names)'
 			local regressors	`dexog_t' `xselected_t' `zselected_t'
 			doregress `var_t' if `touse',								///
-				regressors(`regressors')								///
-				instruments(`regressors')								///
+				inexog(`regressors')									///
 				dict_o(`dict_o')										///
 				dict_t(`dict_t')										///
 				consflag(`lsconsflag')									/// nocons if partialled out or FE
@@ -1263,15 +1298,14 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 				`ivoptions'												///
 				debugflag(`debugflag')
 			ereturn local firstvar `var_o'								//  also serves as flag for replay
-			capture est store _ivlasso_`var_o', title("First-stage equation for `var_o'")
-			if _rc > 0 {
-				di
-				di as text "Warning: unable to store first-stage eqn for `var_o'"
-				di
+			if `dendog_ct'>1 {
+				store_eqn, eqname(_ivlasso_`var_o') eqtitle(First-stage equation for `var_o') eqnumber(`i')
 			}
 			else {
-				local firstlist `firstlist' _ivlasso_`var_o'
+				store_eqn, eqname(_ivlasso_`var_o') eqtitle(First-stage equation for `var_o')
 			}
+			local firstlist `firstlist' `r(eqname)'
+			local ++i
 		}
 	}
 	*
@@ -1306,9 +1340,9 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 			exexog_pl(`iv_e_pl')										///
 			inexog(`inexog')											///	after collinearities removed
 			inexog_ct(`inexog_ct')										///
-			consflag(`lsconsflag')												/// no cons if FE or partialled out or no cons in the first place
-			`robust'													///
-			cluster(`cluster')
+			consflag(`lsconsflag')										/// no cons if FE or partialled out or no cons in the first place
+			`dofopt'													/// applies to FE estimation; #FEs
+			`rkoptions'
 		local weakid			=r(weakid)
 		if `optivflag' {
 			local weakid_l		=r(weakid_l)
@@ -1330,9 +1364,11 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 	************* CHS estimation using orthogonalized vars ************************
 
 	// CHS lasso-based
-	doregress `rho_y_l' if `touse',					///
-		regressors(`rho_e_l' `rho_d_l')				///
-		instruments(`iv_e_l' `rho_d_l')				///
+	doregress `rho_y_l'							///
+		if `touse',									///
+		inexog(`rho_d_l')							///
+		endog(`rho_e_l')							///
+		exexog(`iv_e_l')							///
 		dict_o(`newvars_o')							///
 		dict_t(`newvars_l')							///
 		consflag(0)									///
@@ -1342,11 +1378,18 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 	mat `beta_lasso'=e(b)
 	mat `V_lasso'	=e(V)
 	// set here since doregress with CHS more graceful if model unidentified
+	local kernel	`e(kernel)'						//  if kernel macro was empty, e(kernel) has default kernel
 	local N_clust	=e(N_clust)						//  doregress returns 0 if no clustering
+	local N_clust1	=e(N_clust1)
+	local N_clust2	=e(N_clust2)
+	local clustvar1	`e(clustvar1)'
+	local clustvar2	`e(clustvar2)'
 	// CHS post-lasso-based
-	doregress `rho_y_pl' if `touse',				///
-		regressors(`rho_e_pl' `rho_d_pl')			///
-		instruments(`iv_e_pl' `rho_d_pl')			///
+	doregress `rho_y_pl'							///
+		if `touse',									///
+		inexog(`rho_d_pl')							///
+		endog(`rho_e_pl')							///
+		exexog(`iv_e_pl')							///
 		dict_o(`newvars_o')							///
 		dict_t(`newvars_pl')						///
 		consflag(0)									///
@@ -1366,16 +1409,18 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 	// zselected has all selected Z including notpen and partial, so nothing else needed
 	if `feflag' {									//  if FE, all vars have been FE-transformed so use _t vars
 		local varY_pds		`varY_t'
-		local regressors	`dendog_t' `dexog_t' `xselected_t' `xpartial_t'
-		local instruments	`dexog_t' `xselected_t' `xpartial_t' `zselected_t'
+		local inexog_pds	`dexog_t' `xselected_t' `xpartial_t'
+		local endog_pds		`dendog_t'
+		local exexog_pds	`zselected_t'
 		local pds_dict_o	`dict_o'
 		local pds_dict_t	`dict_t'
 	}
 	else {											//  if not FE, use _f list = original vars with FVs replaced by temps
 		local varY_pds		`varY_o'
-		local regressors	`dendog_o' `dexog_o' `xselected_o' `xpartial_o'
-		local instruments	`dexog_o' `xselected_o' `xpartial_o' `zselected_o'
-		foreach vlist in varY_pds regressors instruments {
+		local inexog_pds	`dexog_o' `xselected_o' `xpartial_o'
+		local endog_pds		`dendog_o'
+		local exexog_pds	`zselected_o'
+		foreach vlist in varY_pds inexog_pds endog_pds exexog_pds {
 			matchnames "``vlist''" "`dict_o'" "`dict_f'"
 			local `vlist'		`r(names)'			//  corresponding tempnames of vars
 		}
@@ -1383,14 +1428,16 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 		local pds_dict_t	`dict_f'
 	}
 
-	doregress `varY_pds' if `touse',				///
-		regressors(`regressors')					///
-		instruments(`instruments')					///
-		dict_o(`pds_dict_o')						///
-		dict_t(`pds_dict_t')						///
-		consflag(`consmodel')						/// consmodel=0 if nocons or FE
-		wvar(`wvar')								///
-		`dofopt'									///
+	doregress `varY_pds'								///
+		if `touse',										///
+		inexog(`inexog_pds')							///
+		endog(`endog_pds')								///
+		exexog(`exexog_pds')							///
+		dict_o(`pds_dict_o')							///
+		dict_t(`pds_dict_t')							///
+		consflag(`consmodel')							/// consmodel=0 if nocons or FE
+		wvar(`wvar')									///
+		`dofopt'										///
 		`ivoptions'
 	mat `beta_pds'	=e(b)
 	mat `V_pds'		=e(V)
@@ -1429,14 +1476,20 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 	ereturn local cmd 		ivlasso
 
 	if "`robust'`cluster'"~="" {
-		ereturn local vce		robust
-		ereturn local vcetype	Robust
+		ereturn local vce			robust
+		ereturn local vcetype		Robust
 	}
 	if `N_clust' {
-		ereturn local vce		cluster
+		ereturn local vce			cluster
 	}
 	ereturn local clustvar			`cluster'
+	ereturn local clustvar1			`clustvar1'
+	ereturn local clustvar2			`clustvar2'
 	ereturn scalar N_clust			=`N_clust'
+	ereturn scalar N_clust1			=`N_clust1'
+	ereturn scalar N_clust2			=`N_clust2'
+	ereturn scalar bw				=`bw'
+	ereturn local kernel			`kernel'		
 
 	if `xpartialflag' & `consflag' {
 		ereturn local xpartial		`xpartial_o' _cons
@@ -1566,6 +1619,23 @@ end
 program define DisplayResults, eclass
 	version 13
 	
+	local method		`e(method)'
+	local depname		`e(depvar)'
+	local N				=e(N)
+	local vce			`e(vce)'
+	local vcetype		`e(vcetype)'
+	local bw			=e(bw)
+	local kernel		`e(kernel)'
+	local clustvar		`e(clustvar)'
+	local clustvar1		`e(clustvar1)'
+	local clustvar2		`e(clustvar2)'
+	local N_clust		=e(N_clust)
+	local N_clust1		=e(N_clust1)
+	local N_clust2		=e(N_clust2)
+	local N_g			=e(N_g)
+	local dvars			`e(dendog)' `e(dexog)'
+	local dvars			: list clean dvars
+
 	if e(dendog_ct) {
 		local estimator IV
 	}
@@ -1672,6 +1742,21 @@ program define DisplayResults, eclass
 	if "`e(firstlist)'" ~= "" {
 		di as text "First-stage estimation(s):"
 		foreach eqn in `e(firstlist)' {
+			if `N_clust' {
+				di as text "(Std. Err. adjusted for " _c
+				if `N_clust1' {
+					di as res `N_clust1' as text " clusters in `clustvar1' and " _c
+					di as res `N_clust2' as text " clusters in `clustvar2')"
+				}
+				else {
+					di as res `N_clust' as text " clusters in `clustvar')"
+				}
+			}
+			if `bw' {
+				di as text "(Std. Err. adjusted for autocorrelation; " _c
+				di as text "bandwidth=" as res `bw' _c
+				di as text " kernel=" as res "`kernel'" as text ")"
+			}
 			est replay `eqn', noheader
 		}
 		di
@@ -1749,17 +1834,6 @@ program define DisplayResults, eclass
 	}
 
 	// Display structural equation results.
-	local method		`e(method)'
-	local depname		`e(depvar)'
-	local N				=e(N)
-	local vce			`e(vce)'
-	local vcetype		`e(vcetype)'
-	local clustvar		`e(clustvar)'
-	local N_clust		=e(N_clust)
-	local N_g			=e(N_g)
-	local dvars			`e(dendog)' `e(dexog)'
-	local dvars			: list clean dvars
-
 	tempname beta_pds beta_lasso beta_plasso V_pds V_lasso V_plasso
 	mat `beta_pds'		=e(beta_pds)
 	mat `V_pds'			=e(V_pds)
@@ -1786,11 +1860,24 @@ program define DisplayResults, eclass
 	if el(`beta_lasso',1,1)<. {
 		di
 		di as text "`estimator' using CHS `method'-orthogonalized vars"
+		if `N_clust' {
+			di as text "(Std. Err. adjusted for " _c
+			if `N_clust1' {
+				di as res `N_clust1' as text " clusters in `clustvar1' and " _c
+				di as res `N_clust2' as text " clusters in `clustvar2')"
+			}
+			else {
+				di as res `N_clust' as text " clusters in `clustvar')"
+			}
+		}
+		if `bw' {
+			di as text "(Std. Err. adjusted for autocorrelation; " _c
+			di as text "bandwidth=" as res `bw' _c
+			di as text " kernel=" as res "`kernel'" as text ")"
+		}
 		ereturn post `beta_lasso' `V_lasso', obs(`N') depname(`depname')
 		ereturn local vce		`vce'
 		ereturn local vcetype	`vcetype'
-		ereturn local clustvar	`clustvar'
-		ereturn scalar N_clust	=`N_clust'
 		ereturn di
 		if `d0ct_l' {
 			di as text "Warning: some coefficients unidentified."
@@ -1799,11 +1886,24 @@ program define DisplayResults, eclass
 	if el(`beta_plasso',1,1)<. {
 		di
 		di as text "`estimator' using CHS post-`method'-orthogonalized vars"
+		if `N_clust' {
+			di as text "(Std. Err. adjusted for " _c
+			if `N_clust1' {
+				di as res `N_clust1' as text " clusters in `clustvar1' and " _c
+				di as res `N_clust2' as text " clusters in `clustvar2')"
+			}
+			else {
+				di as res `N_clust' as text " clusters in `clustvar')"
+			}
+		}
+		if `bw' {
+			di as text "(Std. Err. adjusted for autocorrelation; " _c
+			di as text "bandwidth=" as res `bw' _c
+			di as text " kernel=" as res "`kernel'" as text ")"
+		}
 		ereturn post `beta_plasso' `V_plasso', obs(`N') depname(`depname')
 		ereturn local vce		`vce'
 		ereturn local vcetype	`vcetype'
-		ereturn local clustvar	`clustvar'
-		ereturn scalar N_clust	=`N_clust'
 		ereturn di
 		if `d0ct_pl' {
 			di as text "Warning: some coefficients unidentified."
@@ -1812,11 +1912,24 @@ program define DisplayResults, eclass
 	if el(`beta_pds',1,1)<. {
 		di
 		di as text "`estimator' with PDS-selected variables and full regressor set"
+		if `N_clust' {
+			di as text "(Std. Err. adjusted for " _c
+			if `N_clust1' {
+				di as res `N_clust1' as text " clusters in `clustvar1' and " _c
+				di as res `N_clust2' as text " clusters in `clustvar2')"
+			}
+			else {
+				di as res `N_clust' as text " clusters in `clustvar')"
+			}
+		}
+		if `bw' {
+			di as text "(Std. Err. adjusted for autocorrelation; " _c
+			di as text "bandwidth=" as res `bw' _c
+			di as text " kernel=" as res "`kernel'" as text ")"
+		}
 		ereturn post `beta_pds' `V_pds', obs(`N') depname(`depname')
 		ereturn local vce		`vce'
 		ereturn local vcetype	`vcetype'
-		ereturn local clustvar	`clustvar'
-		ereturn scalar N_clust	=`N_clust'
 		ereturn di
 		di as text "Standard errors and test statistics valid for the following variables only:"
 		DispVars `dvars', _col(5) style(text)
@@ -1836,7 +1949,7 @@ end
 // returns r(allselected0_o) - all selected INCLUDING PARTIAL, NOTPEN, CONS
 //         r(allselected_o)  - all selected penalized only, EXCLUDING PARTIAL, NOTPEN, CONS
 // also generates fitted values or residuals
-program define SelectControls, rclass
+program define SelectControls, rclass sortpreserve
 	version 13
 	syntax ,						///
 		touse(string)				/// pass all varlists as strings to stop fvs processed etc.
@@ -1922,14 +2035,15 @@ program define SelectControls, rclass
 									`dm'								/// tell rlasso data are zero-mean
 									`loptions'
 			if `rlassoflag' & "`highdim_o'`notpen_o'"~="" {
-				capture est store `rlassoprefix'_step`step'_`var_o', title("lasso step `step'")
-				if _rc > 0 {
-					di as text "Warning: unable to store lasso estimation"
+				if `numvars'>1 {
+					store_eqn, eqname(`rlassoprefix'_step`step'_`var_o') eqtitle(lasso step `step') eqnumber(`i')
 				}
 				else {
-					local rlassolist `rlassolist' `rlassoprefix'_step`step'_`var_o'
+					store_eqn, eqname(`rlassoprefix'_step`step'_`var_o') eqtitle(lasso step `step')
 				}
+				local rlassolist `rlassolist' `r(eqname)'
 			}
+
 			mat `beta'				=e(beta)							//  rlasso saves row vectors
 			mat `betaOLS'			=e(betaOLS)							//  rlasso saves row vectors
 			local betavars_o		`e(selected0)'						//  e(selected0) macro INCLUDES PARTIAL, NOTPEN AND CONS
@@ -1983,7 +2097,11 @@ program define SelectControls, rclass
 				}
 			}
 			else {															//  lasso selected nothing or no hi-dims/notpens
-				if `residflag' {
+				if `residflag' & `lsconsflag' {								//  model has a constant
+					sum `var_t' if `touse', meanonly
+					qui replace `gen_l'	= `var_t' - r(mean)					//  "residual" is demeaned original variable
+				}
+				else if `residflag' {
 					qui replace `gen_l'		= `var_t'						//  "residual" is orig variable
 				}
 				else {														//  "fitted value" is zero vector
@@ -2013,7 +2131,11 @@ program define SelectControls, rclass
 				}
 			}
 			else {															//  post-lasso selected nothing or no hi-dims
-				if `residflag' {
+				if `residflag' & `lsconsflag' {								//  model has a constant
+					sum `var_t' if `touse', meanonly
+					qui replace `gen_pl'	= `var_t' - r(mean)				//  "residual" is demeaned original variable
+				}
+				else if `residflag' {
 					qui replace `gen_pl'	= `var_t'						//  "residual" is orig variable
 				}
 				else {														//  "fitted value" is zero vector
@@ -2038,7 +2160,7 @@ end		// End program SelectControls
 
 // idstats - returns weak ID stats for 3 IV estimations (CHS L and PL, PDS)
 // return classical and robust/cluster ("r") versions
-// expects tempvars etc. - no FV or TS vars allowed (ranktest won't take them)
+// expects tempvars etc. - no FV or TS vars allowed (old ranktest wouldn't take them)
 // inexog and exexog arrive after collinearities/omitted/etc. removed
 prog define doIDstats, rclass
 	syntax [if] [in],						///
@@ -2052,8 +2174,11 @@ prog define doIDstats, rclass
 		inexog(string)						///
 		inexog_ct(integer 0)				///
 		consflag(int 0)						///
+		dofminus(int 0)						///
 		robust								///
-		cluster(string)						///
+		cluster(varlist max=2)				///
+		bw(int 0)							///
+		kernel(string)						///
 		]
 
 	// ranktest is a necessary component
@@ -2071,6 +2196,8 @@ prog define doIDstats, rclass
 		local noconstant noconstant
 	}
 	
+	local notiid	= `bw'>0 | "`robust'`cluster'"~=""
+	
 	// PDS is full IV set so constant is possible
 	local exexog_ct	: word count `exexog'
 	local endog_ct	: word count `endog'
@@ -2087,26 +2214,33 @@ prog define doIDstats, rclass
 			di as text "Warning - idstats/ranktest error, singular matrices possible"
 		}
 		else {
-			local weakid		=r(chi2)/r(N)*(r(N)-`inexog_ct'-`exexog_ct')/`exexog_ct'
+			// dofminus is #FEs
+			local weakid		=r(chi2)/r(N)*(r(N)-`inexog_ct'-`exexog_ct'-`dofminus')/`exexog_ct'
 		}
-		if "`robust'`cluster'"~="" {
+		if `notiid' {
 			cap ranktest 	(`endog') (`exexog') if `touse'			///
 							, partial(`inexog') 					///
 							full									///
 							wald									///
-							`robust' cluster(`cluster')				///
+							`robust'								///
+							cluster(`cluster')						///
+							bw(`bw')								///
+							kernel(`kernel')						///
 							`noconstant'
 			if _rc {
 				di as text "Warning - idstats/ranktest error, singular matrices possible"
 			}
-			else if "`robust'"~="" {
-				local weakidr	=r(chi2)/r(N)*(r(N)-`inexog_ct'-`exexog_ct')/`exexog_ct'
-			}
 			else if "`cluster'"~="" {
 				local weakidr	=r(chi2)/r(N)*(r(N)-`inexog_ct'-`exexog_ct')/`exexog_ct' * (r(N_clust)-1)/r(N_clust)
 			}
+			else {
+				// robust, HAC/AC
+				// dofminus is #FEs
+				local weakidr	=r(chi2)/r(N)*(r(N)-`inexog_ct'-`exexog_ct'-`dofminus')/`exexog_ct'
+			}
 		}
 	}
+
 	// endog_l is optimal lasso IV so always nocons
 	// optimal IVs always provided so order condition always satisfied
 	local exexog_l_ct	: word count `exexog_l'
@@ -2121,12 +2255,12 @@ prog define doIDstats, rclass
 	else {
 		local weakid_l		=r(chi2)/r(N)*(r(N)-`inexog_ct'-`exexog_l_ct')/`exexog_l_ct'
 	}
-	if "`robust'`cluster'"~="" {
+	if "`rkoptions'"~="" {
 		cap ranktest 	(`endog_l') (`exexog_l') if `touse'		///
 						, partial(`inexog') 					///
 						full									///
 						wald									///
-						`robust' cluster(`cluster')				///
+						`rkoptions'								///
 						nocons
 		if _rc {
 			di as text "Warning - idstats/ranktest error, singular matrices possible"
@@ -2153,12 +2287,12 @@ prog define doIDstats, rclass
 	else {
 		local weakid_pl		=r(chi2)/r(N)*(r(N)-`inexog_ct'-`exexog_pl_ct')/`exexog_pl_ct'
 	}
-	if "`robust'`cluster'"~="" {
+	if "`rkoptions'"~="" {
 		cap ranktest 	(`endog_pl') (`exexog_pl') if `touse'	///
 						, partial(`inexog') 					///
 						full									///
 						wald									///
-						`robust' cluster(`cluster')				///
+						`rkoptions'								///
 						nocons
 		if _rc {
 			di as text "Warning - idstats/ranktest error, singular matrices possible"
@@ -2181,14 +2315,15 @@ prog define doIDstats, rclass
 end
 
 // regress utility
-// uses old-style reg y x1 x2 (x1 z1) to do IV estimation
+// uses ivreg2 in order to accommodate various VCE options
 // expects UNWEIGHTED vars (pre-weight transformation)
-program define doregress, eclass
+program define doregress, eclass sortpreserve
 	version 13
 	syntax varlist(numeric fv ts min=1 max=1) [if] [in],	/// dep var
-		regressors(varlist numeric fv ts min=1)				/// all regressors
 		[													///
-		instruments(varlist numeric fv ts min=1)			/// all exogenous; may be empty if not identified
+		inexog(varlist numeric fv ts)						///
+		endog(varlist numeric fv ts)						///
+		exexog(varlist numeric fv ts)						///
 		dict_o(string)										/// original varnames
 		dict_t(string)										/// temporary varnames
 		consflag(int 1)										/// flag for constant
@@ -2214,11 +2349,11 @@ program define doregress, eclass
 	if "`wvar'"~="" {
 		local wexp [aw=`wvar']
 	}
-
+	
 	tempname b V
 	// capture in case not identified
-	cap regress `varY_t'								///
-		`regressors' (`instruments')					///
+	cap ivreg2 `varY_t'									///
+		`inexog' (`endog' = `exexog')					///
 		`wexp'											///
 	 	if `touse',										///
 	 	`noconstant'									///
@@ -2232,30 +2367,30 @@ program define doregress, eclass
 	
 		// Extract options to be passed back or used below
 		local N			=`e(N)'
-		local df_r		=`e(df_r)'
-		local df_m		=`e(df_m)'
-		local rank		=`e(rank)'
 		local vcetype	`e(vcetype)'
 		local vce		`e(vce)'
+		local kernel	`e(kernel)'
 		local clustvar	`e(clustvar)'
 		if "`clustvar'"=="" {
 			local N_clust	=0
+			local N_clust1	=0
+			local N_clust2	=0
 		}
 		else {
 			local N_clust	=`e(N_clust)'
+			if "`e(N_clust1)'"~="" {
+				local clustvar1	`e(clustvar1)'
+				local clustvar2	`e(clustvar2)'
+				local N_clust1	=`e(N_clust1)'
+				local N_clust2	=`e(N_clust2)'
+			}
+			else {
+				local N_clust1	=0
+				local N_clust2	=0
+			}
 		}
-	
 		mat `b'	=e(b)
 		mat `V'	=e(V)
-	
-		// Fix (remove) regress dof
-		if "`clustvar'"=="" {							//  remove basic N-K dof adjustment
-			mat `V' = `V' * (`N'-`rank') / (`N'-`dofminus')
-		}
-		else {											//  remove cluster dof adjustment
-			mat `V' = `V' * (`N'-`rank') / (`N'-1)		///
-						* (`N_clust'-1) / `N_clust'
-		}
 		
 		// Fix tempnames if dictionary supplied.
 		if "`dict_o'" ~= "" {
@@ -2282,9 +2417,14 @@ program define doregress, eclass
 		// Other results to return
 		ereturn local vcetype	`vcetype'
 		ereturn local vce		`vce'
+		ereturn local kernel	`kernel'
 		ereturn local clustvar	`clustvar'
 		ereturn scalar N		=`N'
 		ereturn scalar N_clust	=`N_clust'
+		ereturn local clustvar1	`clustvar1'
+		ereturn local clustvar2	`clustvar2'
+		ereturn scalar N_clust1	=`N_clust1'
+		ereturn scalar N_clust2	=`N_clust2'
 	}
 	else {
 		// eqn unidentified
@@ -2294,25 +2434,30 @@ program define doregress, eclass
 		
 		matchnames "`varY_t'" "`dict_t'" "`dict_o'"
 		local varY_o	`r(names)'
-		matchnames "`regressors'" "`dict_t'" "`dict_o'"
+		matchnames "`endog' `inexog'" "`dict_t'" "`dict_o'"
 		local colnames	`r(names)'
 		if `consflag' {
 			local colnames	`colnames' _cons
 		}
 		local k	: word count `colnames'
-				
-		mat `b'	=J(1,`k',0)
-		mat `V'	=J(`k',`k',0)
-		local cnames_o	`r(names)'
-		mat colnames `b' = `cnames_o'
-		mat colnames `V' = `cnames_o'
-		mat rownames `V' = `cnames_o'
 		
-		// build FV info
-		_ms_build_info	`b' if `touse'
-	
-		// Post b and V
-		ereturn post `b' `V', esample(`touse') depname(`varY_o') obs(`N')
+		if `k' > 0 {
+			mat `b'	=J(1,`k',0)
+			mat `V'	=J(`k',`k',0)
+			local cnames_o	`r(names)'
+			mat colnames `b' = `cnames_o'
+			mat colnames `V' = `cnames_o'
+			mat rownames `V' = `cnames_o'
+			
+			// build FV info
+			_ms_build_info	`b' if `touse'
+
+			// Post b and V
+			ereturn post `b' `V', esample(`touse') depname(`varY_o') obs(`N')
+		}
+		else {
+			ereturn post        , esample(`touse') depname(`varY_o') obs(`N')
+		}
 	
 		// Needed to get est store to work
 		ereturn local cmd 		ivlasso
@@ -2321,8 +2466,9 @@ program define doregress, eclass
 
 end
 
+
 // sup-score tests
-program define doSupScore, rclass
+program define doSupScore, rclass sortpreserve
 	version 13
 	syntax [,								///
 			touse(string)					///
@@ -2742,8 +2888,7 @@ program define doSupScore, rclass
 			// ols coef to get default grid limits
 			if "`gridmin'"=="" | "`gridmax'"=="" {
 				doregress `varY_t' if `touse',							///
-					regressors(`dendog_t' `xnotpen_t')					///
-					instruments(`dendog_t' `xnotpen_t')					///
+					inexog(`dendog_t' `xnotpen_t')						///
 					dict_o(`dict_o')									///
 					dict_t(`dict_t')									///
 					consflag(`consflag')								///
@@ -3053,11 +3198,35 @@ program define get_ci_from_table, rclass
 end		//  end get_ci_from_table
 
 
+program define store_eqn, rclass
+	version 13
+	syntax, eqname(string) eqtitle(string) [ eqnumber(integer 0) ]
+	
+	local neweqname	`eqname'
+	local neweqname	=abbrev("`neweqname'",24)
+	local neweqname	: subinstr local neweqname "#" "_", all
+	local neweqname	: subinstr local neweqname "." "_", all
+	local neweqname	: subinstr local neweqname "~" "_", all
+	if `eqnumber' {
+		local neweqname	`neweqname'_`eqnumber'
+	}
+	cap est store `neweqname', title("`eqtitle'")
+	if _rc > 0 {
+		di
+		di as text "Warning: unable to store `eqtitle' with name `neweqname'."
+		di
+	}
+	else {
+		return local eqname `neweqname'
+	}	
+
+end
+
 *************************** Stata utilities ******************************
 
 // copied from lassoutils 1.0.09 03aug2018
 // subroutine for weighting in Stata
-program define _wt, rclass
+program define _wt, rclass sortpreserve
 	version 13
 	syntax anything ,							/// anything is actually a varlist but this is more flexible - see below
 		touse(varlist numeric max=1)			/// required `touse' variable (so marksample unneeded)
@@ -3080,7 +3249,7 @@ program define _wt, rclass
 end
 
 
-// copied from lassoutils 1.0.03 17/12/2017
+// based lassoutils 1.2.01 27july2020
 // subroutine for partialling out
 program define _partial, rclass sortpreserve
 	version 13
@@ -3091,7 +3260,7 @@ program define _partial, rclass sortpreserve
 		tvarlist(string)						/// optional list of temp vars - may be "unfilled" (NaNs)
 		wvar(varlist numeric max=1)				///
 		dmflag(int 0)							///
-		solver(string)							/// svd, qr or empty
+		psolver(string)							///
 		]
 
 	*** `anything' is actually a varlist but this is more flexible.
@@ -3109,19 +3278,18 @@ program define _partial, rclass sortpreserve
 	}
 	*
 
-	*** recode solver macro into numeric 1/2/3
-	if "`solver'"=="" {
-		local solver 0			//  default method (SVD, QR if collinearities - see below)
-	}
-	else if "`solver'"=="svd" {
-		local solver 1			//  force use of SVD solver
-	}
-	else if "`solver'"=="qr" {
-		local solver 2			//  force use of QR solver
+	*** error check - allowed solvers are svd, qr, lu, luxx, chol
+	if "`psolver'"~="" {
+		local optsolver			svd svdxx qr qrxx lu luxx chol
+		local pos				: list posof "`psolver'" in optsolver
+		if `pos' == 0 {
+			di as err "Syntax error: solver `psolver' not allowed"
+			exit 198
+		}
 	}
 	else {
-		di as err "Syntax error: solver `solver' not allowed"
-		exit 198
+		// default is QR+quadcross
+		local psolver			qrxx
 	}
 	*
 	
@@ -3132,7 +3300,7 @@ program define _partial, rclass sortpreserve
 					"`touse'",				/// touse
 					"`wvar'",				/// optional weight variable
 					`dmflag', 				/// treatment of constant/demeaned or not
-					`solver')				//  choice of solver (optional)
+					"`psolver'")			//  choice of solver (optional)
 	return scalar rank	=`r(rank)'			//  rank of matrix P of partialled-out variables 
 	return local dlist	`r(dlist)'			//  list of dropped collinear variables in P
 	*
@@ -3533,7 +3701,7 @@ void s_partial(	string scalar Ynames,
 				string scalar touse,
 				string scalar wvar,			//  optional weight variable
 				scalar dmflag,				//  indicates data are already mean zero; no constant
-				scalar solver)
+				scalar psolver)
 
 {
 
@@ -3585,13 +3753,20 @@ void s_partial(	string scalar Ynames,
 //	Partial-out coeffs.
 //	Not necessary if no vars other than constant. r=rank.
 	if ((!dmflag)& L>0) {
-		b = svqrsolve((P :- Pmeans):*sqrt(W), (Y :- Ymeans):*sqrt(W), r=., solver)	//  partial out P + cons
+		b = anysolver((P :- Pmeans):*sqrt(W), (Y :- Ymeans):*sqrt(W), r=., psolver)	//  partial out P + cons
 	}
 	else if (L>0) {
-		b = svqrsolve(P:*sqrt(W), Y:*sqrt(W), r=., solver)							//  partial out P
+		b = anysolver(P:*sqrt(W), Y:*sqrt(W), r=., psolver)							//  partial out P
 	}
 	else {
 		r=1																			//  partial out cons
+	}
+
+	if (r==.) {
+		_error(3352, "Singular matrix encountered; partialling out failed.")
+	}
+	else if (r<L) {
+		printf("{text}Warning: collinearities encountered in variables to partial out.\n")
 	}
 
 //	Replace with residuals
@@ -3636,57 +3811,81 @@ void s_partial(	string scalar Ynames,
 //end program s_partial
 
 
-// copied from lassoutils 1.0.03 17/12/2017
-// Mata utility for sequential use of SVD & QR solvers
-// Default is SVD;
-// if rank-deficient, use QR (drops columns);
-// if QR then doesn't catch reduced rank, use original SVD.
-// override: solver=0 => above;
-//           solver=1 => always use SVD;
-//           solver=2 => always use QR.
-function svqrsolve (	numeric matrix A,			///
-						numeric matrix B,			///
+// copied from lassoutils 1.2.01 27july2020
+// Mata utility for sequential use of solvers
+// Default is LU (faster) and if rank-deficient, use QR (drops columns).
+// Can also specify lu, qr, svd or chol.
+function anysolver (	numeric matrix A,			/// #1
+						numeric matrix B,			/// #2
 						|							///
-						rank,						///
-						real scalar solver			///
+						r,							/// #3 scalar, returned with rank of matrix
+						string scalar psolver		/// #4
 						)
 {
-	if (args()<=3) solver = 0
+	if (args()<4) psolver = ""
 
-	real matrix Csv
-	real matrix Cqr
-	real scalar rsv
-	real scalar rqr
+	real matrix C
 
-	if (solver==0) {
-		Csv = svsolve(A, B, rsv)
-		if (rsv<cols(A)) {				//  not full rank, try QR
-			Cqr = qrsolve(A, B, rqr)
-			if (rsv<rqr) {				//  QR failed to detect reduced rank, use SVD after all
-				C = Csv
-			}
-			else {						//  QR and SVD agree on reduced rank
-				C = Cqr					//  QR dropped cols, use it
-			}
+	if (psolver=="") {
+		// default behavior: LU, and if rank-deficient, then QR.
+		// if nonsquare, need to use quadcross before calling lusolve
+		if (rows(A) == cols(A)) {		//  square
+			C = lusolve(A, B)			//  default is LU
+		}
+		else {							//  not square
+			C = lusolve(quadcross(A,A),quadcross(A,B))
+		}
+		if (hasmissing(C)) {			//  not full rank, use QR
+			C = qrsolve(A, B, r)		//  r = rank
 		}
 		else {
-			C = Csv						//  full rank, use SVD (more accurate than QR)
+			r = cols(A)					//  full rank
 		}
 	}
-	else if (solver==1) {
-		C = svsolve(A, B, rsv)			//  override default, use SVD no matter what
+	else if (psolver=="lu") {			//  override default, use LU no matter what
+		if (rows(A) == cols(A)) {		//  square
+			C = lusolve(A, B)
+		}
+		else {							//  not square
+			C = lusolve(quadcross(A,A),quadcross(A,B))
+		}
+		if (!hasmissing(C)) {			//  if full rank return it, otherwise leave missing
+			r = cols(A)
+		}
 	}
-	else {
-		C = qrsolve(A, B, rqr)			//  override default, use QR no mater whatt
+	else if (psolver=="luxx") {			//  override default, use LU+quadcross no matter what
+		C = lusolve(quadcross(A,A),quadcross(A,B))
+		if (!hasmissing(C)) {			//  if full rank return it, otherwise leave missing
+			r = cols(A)
+		}
 	}
-	if (solver<=1) {
-		rank = rsv						//  rsv has rank
+	else if (psolver=="qr") {			//  use QR no matter what
+		C = qrsolve(A, B, r)			//  r = rank
 	}
-	else {
-		rank = rqr						//  forced use of QR so return QR rank
+	else if (psolver=="qrxx") {			//  use QR+quadcross no matter what
+		C = qrsolve(quadcross(A,A),quadcross(A,B),r)
 	}
+	else if (psolver=="svd") {			//  use SVD no matter what
+		C = svsolve(A, B, r)
+	}
+	else if (psolver=="svdxx") {			//  use SVD+quadcross no matter what
+		C = svsolve(quadcross(A,A),quadcross(A,B),r)
+	}
+	else if (psolver=="chol") {			//  use Cholesky no matter what
+		// if nonsquare, need to use quadcross before calling cholsolve
+		if (rows(A) == cols(A)) {		//  square
+			C = cholsolve(A, B)
+		}
+		else {							//  not square
+			C = cholsolve(quadcross(A,A),quadcross(A,B))
+		}
+		if (!hasmissing(C)) {			//  if full rank return it, otherwise leave missing
+			r = cols(A)
+		}
+	}
+
 	return(C)
-}	// end svqrsolve
+}	// end anysolver
 
 
 // based on code from weakiv

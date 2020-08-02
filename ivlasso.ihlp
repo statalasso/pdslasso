@@ -1,7 +1,7 @@
 {smcl}
-{* *! version 1.0.11  15jan2019}{...}
+{* *! version 1.0.13  31july2020}{...}
 {hline}
-{cmd:help pdslasso, help ivlasso}{right: pdslasso v1.1}
+{cmd:help pdslasso, help ivlasso}{right: pdslasso v1.3}
 {hline}
 
 {title:Title}
@@ -21,10 +21,13 @@
 {bind:[ {cmd:,}}
 {opt partial(varlist)}
 {opt pnotpen(varlist)}
+{opt psolver(string)}
 {opt aset(varlist)}
 {opt post(method)}
 {opt r:obust}
-{opt cl:uster(var)}
+{opt cl:uster(varlist)}
+{opt bw(int)}
+{opt kernel(string)}
 {opt fe}
 {opt noftools}
 {cmd:rlasso}[{cmd:(}{it:name}{cmd:)}]
@@ -42,10 +45,13 @@
 {bind:[ {cmd:,}}
 {opt partial(varlist)}
 {opt pnotpen(varlist)}
+{opt psolver(string)}
 {opt aset(varlist)}
 {opt post(method)}
 {opt r:obust}
-{opt cl:uster(var)}
+{opt cl:uster(varlist)}
+{opt bw(int)}
+{opt kernel(string)}
 {opt fe}
 {opt noftools}
 {cmd:rlasso}[{cmd:(}{it:name}{cmd:)}]
@@ -64,9 +70,10 @@
 {bind:{cmdab:noc:onstant} ]}
 
 {p 8 14 2}
-Note: {opt pdslasso} requires {opt rlasso} to be installed;
+Note: {opt pdslasso} requires {opt rlasso} and {opt ivreg2} to be installed;
 {opt ivlasso} also requires {opt ranktest}.
-See {rnethelp "http://fmwww.bc.edu/RePEc/bocode/r/rlasso.sthlp":help rlasso}
+See {rnethelp "http://fmwww.bc.edu/RePEc/bocode/r/rlasso.sthlp":help rlasso},
+{rnethelp "http://fmwww.bc.edu/RePEc/bocode/i/ivreg2.sthlp":help ivreg2}
 and {rnethelp "http://fmwww.bc.edu/repec/bocode/r/ranktest.hlp":help ranktest}
 or click on {stata "ssc install lassopack"} or {stata "ssc install ranktest"} to install.
 
@@ -98,8 +105,15 @@ controls and instruments in amelioration set, always included in post-lasso
 {synopt:{opt r:obust}}
 heteroskedastic-robust VCE; lasso penalty loadings account for heteroskedasticity
 {p_end}
-{synopt:{opt cl:uster(var)}}
-cluster-robust VCE; lasso penalty loadings account for clustering
+{synopt:{opt cl:uster(varlist)}}
+cluster-robust VCE; lasso penalty loadings account for clustering; both standard (1-way) and 2-way clustering supported
+{p_end}
+{synopt:{opt bw(int)}}
+HAC/AC VCE; lasso penalty loadings account for autocorrelation (AC) using bandwidth {it:int};
+use with {opt robust} to account for both heteroskedasticity and autocorrelation (HAC)
+{p_end}
+{synopt:{opt kernel(string)}}
+kernel used for HAC/AC penalty loadings (one of: bartlett, truncated, parzen, thann, thamm, daniell, tent, qs; default=bartlett)
 {p_end}
 {synopt:{opt fe}}
 fixed-effects model (requires data to be {helpb xtset})
@@ -134,6 +148,9 @@ lasso options specific to {opt rlasso} estimation; see {helpb rlasso:help rlasso
 {p_end}
 {synopt:{opt noc:onstant}}
 suppress constant from regression (cannot be used with {opt aweights} or {opt pweights})
+{p_end}
+{synopt:{opt psolver(string)}}
+override default solver used for partialling out (one of: qr, qrxx, lu, luxx, svd, svdxx, chol; default=qrxx)
 {p_end}
 {synoptline}
 
@@ -213,6 +230,55 @@ structural parameters in linear models with many controls and/or instruments.
 The routines use methods for estimating sparse high-dimensional models,
 specifically the lasso (Least Absolute Shrinkage and Selection Operator, Tibshirani {helpb ivlasso##Tib1996:1996})
 and the square-root-lasso (Belloni et al. {helpb ivlasso##BCW2011:2011}, {helpb ivlasso##BCW2014:2014}).
+
+{pstd}
+{opt pdslasso} is used for the case where a researcher
+has an outcome variable {it:y}, a structural or causal variable of interest {it:d},
+and a large set of potential control variables {it:x1, x2, x3, ...}.
+The usage in this case is:
+
+{tab}{it:pdslasso y d (x1 x2 x3 ...)}
+
+{pstd}
+{opt pdslasso} accepts multiple causal variables, e.g.:
+
+{tab}{it:pdslasso y d1 d2 (x1 x2 x3 ...)}
+
+{pstd}
+{bf:Important:} The high-dimensional controls must be included {bf:within the parentheses} (...).
+If this is not done, they are treated as causal rather than as controls.
+
+{pstd}
+The problem the researcher faces is that the "right" set of controls is not known.
+In traditional practice, this presents her with a difficult choice:
+use too few controls, or the wrong ones,
+and omitted variable bias will be present;
+use too many, and the model will suffer from overfitting.
+The methods implemented in {opt pdslasso} address this problem by selecting
+enough controls to address the former problem but not so many as to introduce the latter.
+
+{pstd}
+{opt ivlasso} is used for the case where a researcher has
+an endogenous causal variable of interest {it:e},
+and a large set of potential instruments {it:z1, z2, z3, ...).
+
+{pstd}
+The usage in this case is:
+
+{tab}{it:ivlasso y (e = z1 z2 z3 ...)}
+
+{pstd}
+{opt ivlasso} accepts multiple causal variables, e.g.:
+
+{tab}{it:pdslasso y (e1 e2 = z1 z2 z3 ...)}
+
+{pstd}
+{opt ivlasso} also allows combinations of exogenous and endogenous causal variables (d, e)
+and high-dimensional controls and instruments (x, z), e.g.:
+
+{tab}{it:pdslasso y d (x1 x2 x3 ...) (e = z1 z2 z3 ...)}
+
+{pstd}
 Two approaches are implemented in {opt pdslasso} and {opt ivlasso}:
 
 {p 10 15}1. The "post-double-selection" (PDS) methodology of Belloni et al. ({helpb ivlasso##BCCH2012:2012},
@@ -220,7 +286,7 @@ Two approaches are implemented in {opt pdslasso} and {opt ivlasso}:
 {helpb ivlasso##BCH2015:2015}, {helpb ivlasso##BCHK2016:2016}),
 denoted "PDS methodology" below.
 
-{p 10 15}2. The "post-regularization" methodology of Chernozhukov, Hansen and Spindler
+{p 10 15}2. The "post-regularization" (or "double-orthogonalization") methodology of Chernozhukov, Hansen and Spindler
 ({helpb ivlasso##CHS2015:2015}), denoted "CHS methodology" below.
 
 {pstd}
@@ -228,17 +294,8 @@ The implemention of these methods in {opt pdslasso} and {opt ivlasso}
 uses the separate Stata program {helpb rlasso},
 which provides lasso and sqrt-lasso estimation with data-driven penalization;
 see {helpb rlasso} for details.
-
-{pstd}
-The intution behind the methodology is most clearly seen
-from the PDS methodology applied to the case where a researcher
-has an outcome variable {it:y}, a structural or causal variable of interest {it:d},
-and a large set of potential control variables {it:x1, x2, x3, ...}.
-The problem the researcher faces is that the "right" set of controls is not known.
-In traditional practice, this presents her with a difficult choice:
-use too few controls, or the wrong ones,
-and omitted variable bias will be present;
-use too many, and the model will suffer from overfitting.
+For an overview of {helpb rlasso} and the theory behind it,
+see Ahrens et al. ({helpb ivlasso##AHS2020:2020})
 
 {pstd}
 The PDS methodology uses the lasso estimator to select the controls.
@@ -400,6 +457,19 @@ along with the variables specified in {it:varlist};
 to partial out just the constant, specify {opt partial(_cons)}.
 Partialling-out of controls is done by {opt ivlasso};
 partialling-out of instruments is done in the lasso estimation by {opt rlasso}.
+
+{pstd}
+Partialling-out is implemented in Mata using one of Mata's solvers.
+In cases where the variables to be partialled out are collinear or nearly so,
+different solvers may generate different results.
+Users may wish to check the stability of their results in such cases.
+The {opt psolver(.)} option can be used to specify the Mata solver used.
+The default behavior for solving AX=B for X
+is to use the QR decomposition applied to (A'A) and (A'B),
+i.e., qrsolve((A'A),(A'B)), abbreviated qrxx.
+Available options are qr, qrxx, lu, luxx, svd, svdxx, where, e.g.,
+svd indicates using svsolve(A,B) and svdxx indicates using svsolve((A'A),(A'B)).
+{opt pdslasso}/{opt ivlasso} will warn if collinear variables are dropped when partialling out.
 
 {pstd}
 The lasso and sqrt-lasso estimations are obtained via numerical methods (coordinate descent).
@@ -583,8 +653,9 @@ some time to run on some installations.{p_end}
 {synopt:{opt e(N)}}sample size{p_end}
 {synopt:{opt e(xhighdim_ct)}}number of all high-dimensional controls{p_end}
 {synopt:{opt e(zhighdim_ct)}}number of all high-dimensional instruments{p_end}
-{synopt:{opt e(N_clust)}}number of clusters in cluster-robust estimation{p_end}
+{synopt:{opt e(N_clust)}}number of clusters in cluster-robust estimation; in the case of 2-way cluster-robust, {opt e(N_clust)}=min({opt e(N_clust1)},{opt e(N_clust2)}) {p_end}
 {synopt:{opt e(N_g)}}number of groups in fixed-effects model{p_end}
+{synopt:{opt e(bw)}}(HAC/AC only) bandwidth used{p_end}
 {synopt:{opt e(ss_gamma)}}significance level in sup-score tests and CIs{p_end}
 {synopt:{opt e(ss_level)}}test level in % in sup-score tests and CIs (=100*(1-gamma)){p_end}
 {synopt:{opt e(ss_gridmin)}}min grid point in sup-score CI{p_end}
@@ -600,6 +671,7 @@ some time to run on some installations.{p_end}
 {synopt:{opt e(xhighdim)}}names of high-dimensional control variables{p_end}
 {synopt:{opt e(zhighdim)}}names of high-dimensional instruments{p_end}
 {synopt:{opt e(method)}}lasso or sqrt-lasso{p_end}
+{synopt:{opt e(kernel)}}(HAC/AC only) kernel used{p_end}
 {synopt:{opt e(ss_null)}}result of sup-score test (reject/fail to reject){p_end}
 {synopt:{opt e(ss_null_l)}}result of lasso-orthogonalized sup-score test (reject/fail to reject){p_end}
 {synopt:{opt e(ss_null_pl)}}result of post-lasso-orthogonalized sup-score test (reject/fail to reject){p_end}
@@ -629,6 +701,15 @@ some time to run on some installations.{p_end}
 
 {marker references}{...}
 {title:References}
+
+{marker AHS2020}{...}
+{phang}
+Ahrens, A., Hansen, C.B. and M.E. Schaffer. 2020.
+lassopack: model selection and prediction with regularized regression in Stata.
+{it:The Stata Journal}, 20(1):176-235.
+{browse "https://journals.sagepub.com/doi/abs/10.1177/1536867X20909697"}.
+Working paper version: {browse "https://arxiv.org/abs/1901.05397"}.
+{p_end}
 
 {marker AR1949}{...}
 {phang}
@@ -760,12 +841,14 @@ Please check our website {browse "https://statalasso.github.io/"} for more infor
 {marker installation}{title:Installation}
 
 {pstd}
-To get the latest stable version of {it:lassopack} and {it:pdslasso} from our website, 
+{opt pdslasso}/{opt ivlasso} require installation of the {helpb lassopack} package.
+To get the latest stable versions of {helpb lassopack} and {opt pdslasso}/{opt ivlasso} from our website, 
 check the installation instructions at {browse "https://statalasso.github.io/installation/"}.
 We update the website versions more frequently than the SSC version.
+Earlier versions of these programs are also available from the website.
 
 {pstd}
-To verify that {it:pdslasso} is correctly installed, 
+To verify that {opt pdslasso} is correctly installed, 
 click on or type {stata "whichpkg pdslasso"} (which requires {helpb whichpkg}
 to be installed; {stata "ssc install whichpkg"}).
 
@@ -780,20 +863,20 @@ to be installed; {stata "ssc install whichpkg"}).
 They are free contributions to the research community, like a paper.
 Please cite it as such:{p_end}
 
-{phang}Ahrens, A., Hansen, C.B., Schaffer, M.E. 2018.
+{phang}Ahrens, A., Hansen, C.B., Schaffer, M.E. 2018 (updated 2020).
 pdslasso and ivlasso: Progams for post-selection and post-regularization OLS or IV estimation and inference.
 {browse "http://ideas.repec.org/c/boc/bocode/s458459.html"}{p_end}
 
 
 {title:Authors}
 
-	Achim Ahrens, Economic and Social Research Institute, Ireland
-	achim.ahrens@esri.ie
+	Achim Ahrens, Public Policy Group, ETH Zurich, Switzerland
+	achim.ahrens@gess.ethz.ch
 	
 	Christian B. Hansen, University of Chicago, USA
 	Christian.Hansen@chicagobooth.edu
 
-	Mark E Schaffer, Heriot-Watt University, UK
+	Mark E. Schaffer, Heriot-Watt University, UK
 	m.e.schaffer@hw.ac.uk
 
 

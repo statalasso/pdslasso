@@ -1,5 +1,5 @@
-*! ivlasso_p 1.2 21june2020
-*! pdslasso package 1.1.1 21june2020
+*! ivlasso_p 1.0.00 26/09/2017
+*! pdslasso package 1.1 21june2020
 *! authors aa/cbh/ms
 * postestimation predict for ivlasso and pdslasso
 

@@ -1,5 +1,5 @@
 *! pdslasso 1.0.03 04sept2018
-*! pdslasso package 1.1.1 21june2020
+*! pdslasso package 1.1 15jan2019
 *! authors aa/cbh/ms
 *  wrapper for ivlasso
 

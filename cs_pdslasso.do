@@ -1,4 +1,4 @@
-* cert script for pdslasso/ivlasso/rlasso/CHS 1.0.05 MS 13jan2019
+* cert script for pdslasso/ivlasso/rlasso/CHS 1.0.06 MS 14oct2019
 * uses 4 external datasets:
 * 1. Levitt dataset from Belloni et al. J. of Econ. Persp. 28:2.
 *    Ascii file levitt_ex.dat available online from journal publisher.
@@ -43,7 +43,7 @@ which lassoutils
 //   because of different varnames (FVs vs created by hand), coef vectors
 //     are sorted before comparing
 
-insheet using Data\levitt_ex.dat, clear
+insheet using ..\Current\Data\levitt_ex.dat, clear
 
 * Drop DC, Alaska, and Hawaii
 *drop if statenum == 9 | statenum == 2 | statenum == 12
@@ -342,7 +342,7 @@ rlasso D.lpc_viol													///
 		(c.Dxxgunlaw0##c.Dxxgunlaw0)#(c.trend##c.trend)				///
 		(c.Dxxbeer0##c.Dxxbeer0	)#(c.trend##c.trend)				///
 		i.year, partial(i.year) robust lalt corrnum(0)				///
-		maxupsiter(100) c0(0.55)
+		maxpsiiter(100) c0(0.55)
 di "p=" e(p)
 global yvSelrlasso `e(selected)'
 di "$yvSelrlasso"
@@ -447,7 +447,7 @@ rlasso D.efaviol													///
 		(c.Dxxgunlaw0##c.Dxxgunlaw0)#(c.trend##c.trend)				///
 		(c.Dxxbeer0##c.Dxxbeer0	)#(c.trend##c.trend)				///
 		i.year, partial(i.year) robust lalt corrnum(0)				///
-		maxupsiter(100) c0(0.55)
+		maxpsiiter(100) c0(0.55)
 di "p=" e(p)
 global xvSelrlasso `e(selected)'
 di "$xvSelrlasso"
@@ -554,7 +554,7 @@ pdslasso D.lpc_viol D.efaviol										///
 		i.year														///
 		)															///
 		, partial(i.year) robust									///
-		lopt(lalt corrnum(0) maxupsiter(100) c0(0.55))
+		lopt(lalt corrnum(0) maxpsiiter(100) c0(0.55))
 mat b_pdslasso=e(b)
 
 * Get union of selected instruments
@@ -656,7 +656,7 @@ rlasso D.lpc_prop													///
 		(c.Dxxgunlaw0##c.Dxxgunlaw0)#(c.trend##c.trend)				///
 		(c.Dxxbeer0##c.Dxxbeer0	)#(c.trend##c.trend)				///
 		i.year, partial(i.year) robust lalt corrnum(0)				///
-		maxupsiter(100) tolopt(1e-10) tolzero(1e-10) tolups(1e-10)	///
+		maxpsiiter(100) tolopt(1e-10) tolzero(1e-10) tolpsi(1e-10)	///
 		c0(0.55)
 di "p=" e(p)
 global ypSelrlasso `e(selected)'
@@ -671,7 +671,7 @@ else {
 
 * Property Outcome
 /*
-lassoShootingCBH Dyprop $AllProp if trend>0, controls($tdums) lasiter(100) verbose(0) fdisplay(1) ltol(1e-10) tolups(1e-10) tolzero(1e-10)
+lassoShootingCBH Dyprop $AllProp if trend>0, controls($tdums) lasiter(100) verbose(0) fdisplay(1) ltol(1e-10) tolpsi(1e-10) tolzero(1e-10)
 di "p=" r(p)
 global ypSel `r(selected)'
 di "$ypSel"
@@ -761,7 +761,7 @@ rlasso D.efaprop													///
 		(c.Dxxgunlaw0##c.Dxxgunlaw0)#(c.trend##c.trend)				///
 		(c.Dxxbeer0##c.Dxxbeer0	)#(c.trend##c.trend)				///
 		i.year, partial(i.year) robust lalt corrnum(0)				///
-		maxupsiter(100) c0(0.55)
+		maxpsiiter(100) c0(0.55)
 di "p=" e(p)
 global ypSelrlasso `e(selected)'
 di "$xpSelrlasso"
@@ -866,7 +866,7 @@ pdslasso D.lpc_prop D.efaprop										///
 		i.year														///
 		)															///
 		, partial(i.year) robust									///
-		lopt(lalt corrnum(0) maxupsiter(100) c0(0.55))
+		lopt(lalt corrnum(0) maxpsiiter(100) c0(0.55))
 mat b_pdslasso=e(b)
 
 * Get union of selected instruments
@@ -967,7 +967,7 @@ rlasso D.lpc_murd													///
 		(c.Dxxgunlaw0##c.Dxxgunlaw0)#(c.trend##c.trend)				///
 		(c.Dxxbeer0##c.Dxxbeer0	)#(c.trend##c.trend)				///
 		i.year, partial(i.year) robust lalt corrnum(0)				///
-		maxupsiter(100) c0(0.55)
+		maxpsiiter(100) c0(0.55)
 di "p=" e(p)
 global ymSelrlasso `e(selected)'
 di "$ymSelrlasso"
@@ -1071,7 +1071,7 @@ rlasso D.efamurd													///
 		(c.Dxxgunlaw0##c.Dxxgunlaw0)#(c.trend##c.trend)				///
 		(c.Dxxbeer0##c.Dxxbeer0	)#(c.trend##c.trend)				///
 		i.year, partial(i.year) robust lalt corrnum(0)				///
-		maxupsiter(100) c0(0.55)
+		maxpsiiter(100) c0(0.55)
 di "p=" e(p)
 global xmSelrlasso `e(selected)'
 di "$xmSelrlasso"
@@ -1176,7 +1176,7 @@ pdslasso D.lpc_murd D.efamurd										///
 		i.year														///
 		)															///
 		, partial(i.year) robust									///
-		lopt(lalt corrnum(0) maxupsiter(100) c0(0.55))
+		lopt(lalt corrnum(0) maxpsiiter(100) c0(0.55))
 mat b_pdslasso=e(b)
 
 * Get union of selected instruments
@@ -1454,6 +1454,130 @@ pdslasso D.lpc_prop D.efaprop										///
 assert "`e(noftools)'"=="noftools"
 savedresults comp ftools e()
 
+// misc options
+global controls														///
+		c.viol0##c.viol0											///
+		c.Dviol0##c.Dviol0											///
+		c.(D.($xx))##c.(D.($xx))									/// note macro
+		c.(L.xxprison)##c.(L.xxprison)								///
+		c.(L.xxpolice)##c.(L.xxpolice)								///
+		c.(L.xxunemp)##c.(L.xxunemp)								///
+		c.(L.xxincome)##c.(L.xxincome)								///
+		c.(L.xxpover)##c.(L.xxpover)								///
+		c.(L.xxafdc15)##c.(L.xxafdc15)								///
+		c.(L.xxgunlaw)##c.(L.xxgunlaw)								///
+		c.(L.xxbeer)##c.(L.xxbeer)									///
+		c.Mxxprison##c.Mxxprison									///
+		c.Mxxpolice##c.Mxxpolice									///
+		c.Mxxunemp##c.Mxxunemp										///
+		c.Mxxincome##c.Mxxincome									///
+		c.Mxxpover##c.Mxxpover										///
+		c.Mxxafdc15##c.Mxxafdc15									///
+		c.Mxxgunlaw##c.Mxxgunlaw									///
+		c.Mxxbeer##c.Mxxbeer										///
+		c.xxprison0##c.xxprison0									///
+		c.xxpolice0##c.xxpolice0									///
+		c.xxunemp0##c.xxunemp0										///
+		c.xxincome0##c.xxincome0									///
+		c.xxpover0##c.xxpover0										///
+		c.xxafdc150##c.xxafdc150									///
+		c.xxgunlaw0##c.xxgunlaw0									///
+		c.xxbeer0##c.xxbeer0										///
+		c.Dxxprison0##c.Dxxprison0									///
+		c.Dxxpolice0##c.Dxxpolice0									///
+		c.Dxxunemp0##c.Dxxunemp0									///
+		c.Dxxincome0##c.Dxxincome0									///
+		c.Dxxpover0##c.Dxxpover0									///
+		c.Dxxafdc150##c.Dxxafdc150									///
+		c.Dxxgunlaw0##c.Dxxgunlaw0									///
+		c.Dxxbeer0##c.Dxxbeer0										///
+																	///
+		(c.viol0##c.viol0)#(c.trend##c.trend)						/// now interacted with trend
+		(c.Dviol0##c.Dviol0)#(c.trend##c.trend)						///
+		(c.(D.($xx))##c.(D.($xx)))#(c.trend##c.trend)				/// note macro
+		(c.(L.xxprison)##c.(L.xxprison))#(c.trend##c.trend)			///
+		(c.(L.xxpolice)##c.(L.xxpolice))#(c.trend##c.trend)			///
+		(c.(L.xxunemp)##c.(L.xxunemp))#(c.trend##c.trend)			///
+		(c.(L.xxincome)##c.(L.xxincome))#(c.trend##c.trend)			///
+		(c.(L.xxpover)##c.(L.xxpover))#(c.trend##c.trend)			///
+		(c.(L.xxafdc15)##c.(L.xxafdc15))#(c.trend##c.trend)			///
+		(c.(L.xxgunlaw)##c.(L.xxgunlaw))#(c.trend##c.trend)			///
+		(c.(L.xxbeer)##c.(L.xxbeer))#(c.trend##c.trend)				///
+		(c.Mxxprison##c.Mxxprison)#(c.trend##c.trend)				///
+		(c.Mxxpolice##c.Mxxpolice)#(c.trend##c.trend)				///
+		(c.Mxxunemp##c.Mxxunemp	)#(c.trend##c.trend)				///
+		(c.Mxxincome##c.Mxxincome)#(c.trend##c.trend)				///
+		(c.Mxxpover##c.Mxxpover	)#(c.trend##c.trend)				///
+		(c.Mxxafdc15##c.Mxxafdc15)#(c.trend##c.trend)				///
+		(c.Mxxgunlaw##c.Mxxgunlaw)#(c.trend##c.trend)				///
+		(c.Mxxbeer##c.Mxxbeer)#(c.trend##c.trend)					///
+		(c.xxprison0##c.xxprison0)#(c.trend##c.trend)				///
+		(c.xxpolice0##c.xxpolice0)#(c.trend##c.trend)				///
+		(c.xxunemp0##c.xxunemp0)#(c.trend##c.trend)					///
+		(c.xxincome0##c.xxincome0)#(c.trend##c.trend)				///
+		(c.xxpover0##c.xxpover0)#(c.trend##c.trend)					///
+		(c.xxafdc150##c.xxafdc150)#(c.trend##c.trend)				///
+		(c.xxgunlaw0##c.xxgunlaw0)#(c.trend##c.trend)				///
+		(c.xxbeer0##c.xxbeer0)#(c.trend##c.trend)					///
+		(c.Dxxprison0##c.Dxxprison0)#(c.trend##c.trend)				///
+		(c.Dxxpolice0##c.Dxxpolice0)#(c.trend##c.trend)				///
+		(c.Dxxunemp0##c.Dxxunemp0)#(c.trend##c.trend)				///
+		(c.Dxxincome0##c.Dxxincome0)#(c.trend##c.trend)				///
+		(c.Dxxpover0##c.Dxxpover0)#(c.trend##c.trend)				///
+		(c.Dxxafdc150##c.Dxxafdc150)#(c.trend##c.trend)				///
+		(c.Dxxgunlaw0##c.Dxxgunlaw0)#(c.trend##c.trend)				///
+		(c.Dxxbeer0##c.Dxxbeer0	)#(c.trend##c.trend)				///
+		i.year
+
+// psolver option
+// default solver is qrxx
+pdslasso D.lpc_viol D.efaviol										///
+		($controls)													/// no trend
+		, partial(i.year) robust
+savedresults save partial e()
+// default solver is qrxx = QR+quadcross
+// collinearity with years so cholesky fails; comment out
+foreach solver in svd svdxx qr lu luxx /* chol */ {
+	di
+	di "solver=`solver':"
+	pdslasso D.lpc_viol D.efaviol									///
+			($controls)												/// no trend
+			, partial(i.year) robust psolver(`solver')
+	savedresults comp partial e(), exclude(							///
+		macro: cmdline												///
+			)  tol(1e-8)
+}
+
+// 2-way cluster roubst
+pdslasso D.lpc_viol D.efaviol										///
+		($controls)													///
+		, cluster(statenum year)
+savedresults save twoway e()
+// reverse order
+pdslasso D.lpc_viol D.efaviol										///
+		($controls)													///
+		, cluster(year statenum)
+savedresults comp twoway e(), exclude(								///
+	macro: cmdline loptions clustvar clustvar1 clustvar2			///
+	scalar: N_clust1 N_clust2										///
+		)  tol(1e-8)
+
+// cluster-robust with a balances panel is equivalent to
+// HAC with bw=all lags and kernel=truncated (and same rlasso gamma)
+// can use lopt(gamma(0.1)) but HAC with lopt(maq) theoretically appealing
+pdslasso D.lpc_viol D.efaviol										///
+		($controls)													///
+		, rob bw(11) kernel(tru) lopt(maq)
+savedresults save hac e()
+pdslasso D.lpc_viol D.efaviol										///
+		($controls)													///
+		, cluster(statenum)
+savedresults comp hac e(), exclude(								///
+	macro: cmdline loptions clustvar kernel pload vce			///
+	scalar: N_clust N_clust1 N_clust2 bw								///
+		)  tol(1e-8)
+
+
 // ***************** END LEVITT DATASET ************************* //
 
 
@@ -1462,7 +1586,7 @@ savedresults comp ftools e()
 * follows/replicates Matlab code/results from Belloni et. al 2012.
 
 // dataset separately constructed from Matalab data and code
-use Data\BLP, clear
+use ..\Current\Data\BLP, clear
 
 gen double y = ln(share) - ln(outshr)
 
@@ -1470,8 +1594,8 @@ gen double y = ln(share) - ln(outshr)
 // default lambda is 2.2*sqrt(n)*norminv(1-(1/log(n))/(2*p))
 // i.e. "gamma" = 1/log(2217) = 0.12980421
 // default is het-rob loadings
-// default max ups iter = 15
-// default ups tol = 1e-6
+// default max psi iter = 15
+// default psi tol = 1e-6
 // default zero tol = 1e-4 (not settable in feasiblePostLasso)
 // default opt tol = 1e-5 (not settable in feasilblePostLasso)
 // 6 results replicated, 3 with tol 1e-3, 3 with tol 1e-5
@@ -1520,8 +1644,8 @@ rlasso price																///
 		sum_othbig_1 sum_othbig_2 sum_othbig_3 sum_othbig_4 sum_othbig_5	///
 		sum_rivbig_1 sum_rivbig_2 sum_rivbig_3 sum_rivbig_4 sum_rivbig_5	///
 		hpwt air mpd space													///
-		, displayall gamma(0.12980421) rob maxupsiter(15)					///
-		tolups(1e-6) tolzero(1e-4) tolopt(1e-5)
+		, displayall gamma(0.12980421) rob maxpsiiter(15)					///
+		tolpsi(1e-6) tolzero(1e-4) tolopt(1e-5)
 
 mat b_rlasso = e(betaAll)
 mat b_rlasso = b_rlasso[1,1..colsof(b_rlasso)-1]
@@ -1546,8 +1670,8 @@ mat b_matlab = 				///
 
 rlasso y																	///
 		hpwt air mpd space 													///
-		, displayall gamma(0.12980421) rob maxupsiter(15)					///
-		tolups(1e-6) tolzero(1e-4) tolopt(1e-5)
+		, displayall gamma(0.12980421) rob maxpsiiter(15)					///
+		tolpsi(1e-6) tolzero(1e-4) tolopt(1e-5)
 
 mat b_rlasso = e(betaAll)
 mat b_rlasso = b_rlasso[1,1..colsof(b_rlasso)-1]
@@ -1565,7 +1689,7 @@ ivlasso y (price=															///
 		sum_rivbig_1 sum_rivbig_2 sum_rivbig_3 sum_rivbig_4 sum_rivbig_5	///
 		)																	///
 		(hpwt air mpd space)												///
-		, rob lopt(gamma(0.12980421) maxupsiter(15) tolups(1e-6))
+		, rob lopt(gamma(0.12980421) maxpsiiter(15) tolpsi(1e-6))
 // note tougher tolerance
 assert reldif(el(e(beta_plasso),1,1), -0.184934034947562)<1e-5
 
@@ -1729,8 +1853,8 @@ rlasso price																///
 		Z*																	///
 		hpwt air mpdu spaceu tu												///
 		hpwt_sq-spaceu_tu													///
-		, displayall gamma(0.12980421) rob maxupsiter(15)					///
-		tolups(1e-6) tolzero(1e-4) tolopt(1e-5)
+		, displayall gamma(0.12980421) rob maxpsiiter(15)					///
+		tolpsi(1e-6) tolzero(1e-4) tolopt(1e-5)
 
 mat b_rlasso = e(betaAll)
 mat b_rlasso = b_rlasso[1,1..colsof(b_rlasso)-1]
@@ -1796,13 +1920,13 @@ mat b_matlab = 				///
 rlasso y																	///
 		hpwt air mpdu spaceu tu												///
 		hpwt_sq-spaceu_tu													///
-		, displayall gamma(0.12980421) rob maxupsiter(15)					///
-		tolups(1e-6) tolzero(1e-4) tolopt(1e-5)
+		, displayall gamma(0.12980421) rob maxpsiiter(15)					///
+		tolpsi(1e-6) tolzero(1e-4) tolopt(1e-5)
 
 mat b_rlasso = e(betaAll)
 mat b_rlasso = b_rlasso[1,1..colsof(b_rlasso)-1]
 // note looser tolerance
-assert mreldif(b_rlasso,b_matlab)<1e-3
+assert mreldif(b_rlasso,b_matlab)<1e-2
 
 // post-regularization IV (line 157)
 // post-lasso-orthogonalized replicates
@@ -1814,7 +1938,7 @@ ivlasso y (price=															///
 		)																	///
 		(hpwt air mpdu spaceu tu											///
 		hpwt_sq-spaceu_tu)													///
-		, rob lopt(gamma(0.12980421) maxupsiter(15) tolups(1e-6))
+		, rob lopt(gamma(0.12980421) maxpsiiter(15) tolpsi(1e-6))
 // note tougher tolerance
 assert reldif(el(e(beta_plasso),1,1), -0.221208122513718)<1e-5
 
@@ -1866,8 +1990,8 @@ rlasso price																///
 		sum_othbig_1 sum_othbig_2 sum_othbig_3 sum_othbig_4 sum_othbig_5	///
 		sum_rivbig_1 sum_rivbig_2 sum_rivbig_3 sum_rivbig_4 sum_rivbig_5	///
 		hpwt air mpd space													///
-		, displayall gamma(0.12980421) rob maxupsiter(15)					///
-		tolups(1e-6) tolzero(1e-4) tolopt(1e-5)
+		, displayall gamma(0.12980421) rob maxpsiiter(15)					///
+		tolpsi(1e-6) tolzero(1e-4) tolopt(1e-5)
 
 mat b_rlasso = e(betaAll)
 mat b_rlasso = b_rlasso[1,1..colsof(b_rlasso)-1]
@@ -1892,8 +2016,8 @@ mat b_matlab = 				///
 
 rlasso y																	///
 		hpwt air mpd space 													///
-		, displayall gamma(0.12980421) rob maxupsiter(15)					///
-		tolups(1e-6) tolzero(1e-4) tolopt(1e-5)
+		, displayall gamma(0.12980421) rob maxpsiiter(15)					///
+		tolpsi(1e-6) tolzero(1e-4) tolopt(1e-5)
 
 mat b_rlasso = e(betaAll)
 mat b_rlasso = b_rlasso[1,1..colsof(b_rlasso)-1]
@@ -1911,7 +2035,7 @@ ivlasso y (price=															///
 		sum_rivbig_1 sum_rivbig_2 sum_rivbig_3 sum_rivbig_4 sum_rivbig_5	///
 		)																	///
 		(hpwt air mpd space)												///
-		, rob lopt(gamma(0.12980421) maxupsiter(15) tolups(1e-6))
+		, rob lopt(gamma(0.12980421) maxpsiiter(15) tolpsi(1e-6))
 // note tougher tolerance
 assert reldif(el(e(beta_plasso),1,1), -0.184934034947562)<1e-5
 
@@ -2075,8 +2199,8 @@ rlasso price																///
 		Z*																	///
 		hpwt air mpdu spaceu tu												///
 		hpwt_sq-spaceu_tu													///
-		, displayall gamma(0.12980421) rob maxupsiter(15)					///
-		tolups(1e-6) tolzero(1e-4) tolopt(1e-5)
+		, displayall gamma(0.12980421) rob maxpsiiter(15)					///
+		tolpsi(1e-6) tolzero(1e-4) tolopt(1e-5)
 
 mat b_rlasso = e(betaAll)
 mat b_rlasso = b_rlasso[1,1..colsof(b_rlasso)-1]
@@ -2142,13 +2266,13 @@ mat b_matlab = 				///
 rlasso y																	///
 		hpwt air mpdu spaceu tu												///
 		hpwt_sq-spaceu_tu													///
-		, displayall gamma(0.12980421)  rob maxupsiter(15)					///
-		tolups(1e-6) tolzero(1e-4) tolopt(1e-5)
+		, displayall gamma(0.12980421)  rob maxpsiiter(15)					///
+		tolpsi(1e-6) tolzero(1e-4) tolopt(1e-5)
 
 mat b_rlasso = e(betaAll)
 mat b_rlasso = b_rlasso[1,1..colsof(b_rlasso)-1]
 // note looser tolerance
-assert mreldif(b_rlasso,b_matlab)<1e-3
+assert mreldif(b_rlasso,b_matlab)<1e-2
 
 // post-regularization IV (line 157)
 // post-lasso-orthogonalized replicates
@@ -2160,7 +2284,7 @@ ivlasso y (price=															///
 		)																	///
 		(hpwt air mpdu spaceu tu											///
 		hpwt_sq-spaceu_tu)													///
-		, rob lopt(gamma(0.12980421) maxupsiter(15) tolups(1e-6))
+		, rob lopt(gamma(0.12980421) maxpsiiter(15) tolpsi(1e-6))
 // note tougher tolerance
 assert reldif(el(e(beta_plasso),1,1), -0.221208122513718)<1e-5
 
@@ -2171,8 +2295,8 @@ assert reldif(el(e(beta_plasso),1,1), -0.221208122513718)<1e-5
 // used to check options etc.; no replication.
 // datasets separately downloaded from economics.mit.edu; see help ivlasso.
 clear
-use Data\maketable6
-merge 1:1 shortnam using Data\maketable8
+use ..\Current\Data\maketable6
+merge 1:1 shortnam using ..\Current\Data\maketable8
 keep if baseco==1
 order shortnam logpgp95 avexpr lat_abst logem4 edes1975 avelf, first
 order indtime euro1900 democ1 cons1 democ00a cons00a, last
@@ -2242,6 +2366,19 @@ ivlasso logpgp95											///
 	sscset ssgridmin(0) ssgridmax(2) ssgamma(0.1)			///
 	lopt(seed(1))
 
+// Select instruments only; exogenous causal variable also present.
+// Confirm CHS results same with and without partialling-out constant.
+ivlasso logpgp95											///
+	lat_abst												///
+	(avexpr=logem4 euro1900-cons00a)
+mat CHS_lasso =e(beta_lasso)
+mat CHS_plasso=e(beta_plasso)
+ivlasso logpgp95											///
+	lat_abst												///
+	(avexpr=logem4 euro1900-cons00a)						///
+	, partial(_cons)
+assert mreldif(CHS_lasso, e(beta_lasso)) <1e-8
+assert mreldif(CHS_plasso,e(beta_plasso))<1e-8
 	
 // Weights
 
@@ -2277,7 +2414,7 @@ foreach opt in "" "rob" {
 	pdslasso logpgp95 avexpr												///
 		(lat_abst edes1975 avelf temp* humid*)								///
 		[aw=logpgp95] if touse												///
-		, lopt(tolzero(1e-10) tolups(1e-10) tolopt(1e-8)) `opt'
+		, lopt(tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8)) `opt'
 	savedresults save pdslasso e()
 	mat b_pds=e(beta_pds)
 	mat V_pds=e(V_pds)
@@ -2289,12 +2426,12 @@ foreach opt in "" "rob" {
 	pdslasso logpgp95 avexpr												///
 		(lat_abst edes1975 avelf temp* humid*)								///
 		[aw=logpgp95] if touse												///
-		, lopt(prestd tolzero(1e-10) tolups(1e-10) tolopt(1e-8)) `opt'
+		, lopt(prestd tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8)) `opt'
 	savedresults comp pdslasso e(), exclude(macros: loptions) tol(1e-9)
 	pdslasso w_c_logpgp95 w_c_avexpr										///
 		(w_c_lat_abst w_c_edes1975 w_c_avelf w_c_temp* w_c_humid*)			///
 		if touse															///
-		, nocons dm lopt(tolzero(1e-10) tolups(1e-10) tolopt(1e-8)) `opt'
+		, nocons dm lopt(tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8)) `opt'
 	// no constant to compare
 	mat b_pds=b_pds[1,1..colsof(b_pds)-1]
 	mat V_pds=V_pds[1..rowsof(V_pds),1..colsof(V_pds)-1]
@@ -2313,7 +2450,7 @@ foreach opt in "" "rob" {
 	ivlasso logpgp95 (avexpr=logem4 euro1900-cons00a)						///
 		(lat_abst edes1975 avelf temp* humid*)								///
 		[aw=logpgp95]														///
-		, lopt(tolzero(1e-10) tolups(1e-10) tolopt(1e-8))					///
+		, lopt(tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8))					///
 		first `opt'
 	savedresults save ivlasso e()
 	mat b_pds=e(beta_pds)
@@ -2328,13 +2465,13 @@ foreach opt in "" "rob" {
 	ivlasso logpgp95 (avexpr=logem4 euro1900-cons00a)						///
 		(lat_abst edes1975 avelf temp* humid*)								///
 		[aw=logpgp95]														///
-		, lopt(prestd tolzero(1e-10) tolups(1e-10) tolopt(1e-8))			///
+		, lopt(prestd tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8))			///
 		first `opt'
 	savedresults comp ivlasso e(), exclude(macros: loptions) tol(1e-7)
 	// preweighted data
 	ivlasso w_c_logpgp95 (w_c_avexpr=w_c_logem4 w_c_euro1900-w_c_cons00a)	///
 		(w_c_lat_abst w_c_edes1975 w_c_avelf w_c_temp* w_c_humid*)			///
-		, nocons dm lopt(tolzero(1e-10) tolups(1e-10) tolopt(1e-8))			///
+		, nocons dm lopt(tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8))			///
 		first `opt'
 	// no constant to compare
 	mat b_pds=b_pds[1,1..colsof(b_pds)-1]
@@ -2391,7 +2528,7 @@ foreach opt in "" "rob" {
 	ivlasso logpgp95 (avexpr=logem4 euro1900-cons00a)						///
 		(lat_abst edes1975 avelf temp* humid*)								///
 		[aw=logpgp95]														///
-		, lopt(tolzero(1e-10) tolups(1e-10) tolopt(1e-8))					///
+		, lopt(tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8))					///
 		fe																	///
 		first `opt'
 	savedresults save ivlasso e()
@@ -2407,14 +2544,14 @@ foreach opt in "" "rob" {
 	ivlasso logpgp95 (avexpr=logem4 euro1900-cons00a)						///
 		(lat_abst edes1975 avelf temp* humid*)								///
 		[aw=logpgp95]														///
-		, lopt(prestd tolzero(1e-10) tolups(1e-10) tolopt(1e-8))			///
+		, lopt(prestd tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8))			///
 		fe																	///
 		first `opt'
 	savedresults comp ivlasso e(), exclude(macros: loptions) tol(1e-7)
 	// preweighted data
 	ivlasso w_c_logpgp95 (w_c_avexpr=w_c_logem4 w_c_euro1900-w_c_cons00a)	///
 		(w_c_lat_abst w_c_edes1975 w_c_avelf w_c_temp* w_c_humid*)			///
-		, nocons dm lopt(tolzero(1e-10) tolups(1e-10) tolopt(1e-8))			///
+		, nocons dm lopt(tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8))			///
 		first `opt'
 	// no constant to compare in either estimation
 	// Can't compare Vs since dofs are different
@@ -2466,7 +2603,7 @@ foreach opt in "" "rob" {
 	ivlasso logpgp95 (avexpr=logem4 euro1900-cons00a)						///
 		(lat_abst edes1975 avelf temp* humid* steplow)						///
 		[aw=logpgp95]														///
-		, lopt(tolzero(1e-10) tolups(1e-10) tolopt(1e-8))					///
+		, lopt(tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8))					///
 		partial(steplow) fe													///
 		first `opt'
 	savedresults save ivlasso e()
@@ -2482,14 +2619,14 @@ foreach opt in "" "rob" {
 	ivlasso logpgp95 (avexpr=logem4 euro1900-cons00a)						///
 		(lat_abst edes1975 avelf temp* humid* steplow)						///
 		[aw=logpgp95]														///
-		, lopt(prestd tolzero(1e-10) tolups(1e-10) tolopt(1e-8))			///
+		, lopt(prestd tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8))			///
 		partial(steplow) fe													///
 		first `opt'
 	savedresults comp ivlasso e(), exclude(macros: loptions) tol(1e-7)
 	// preweighted data
 	ivlasso w_c_logpgp95 (w_c_avexpr=w_c_logem4 w_c_euro1900-w_c_cons00a)	///
 		(w_c_lat_abst w_c_edes1975 w_c_avelf w_c_temp* w_c_humid*)			///
-		, nocons dm lopt(tolzero(1e-10) tolups(1e-10) tolopt(1e-8))			///
+		, nocons dm lopt(tolzero(1e-10) tolpsi(1e-10) tolopt(1e-8))			///
 		first `opt'
 	// no constant to compare in either estimation but 1 var partialled out
 	// Can't compare Vs since dofs are different
