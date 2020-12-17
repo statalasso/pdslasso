@@ -1,4 +1,4 @@
-*! ivlasso 1.1.01 28july2020
+*! ivlasso 1.1.02 27oct2020
 *! pdslasso package 1.3 29july2020
 *! authors aa/cbh/ms
 * ivlasso:		main program
@@ -47,11 +47,13 @@
 * 1.0.14  (11oct2019)
 *         Bug fix - for models with exogenous causal variables, no HD controls, a model constant, and no partialling-out,
 *         CHS estimates were incorrect because the causal variables were not being centered (partial out the constant).
-* 1.1.01  (date tbc)
+* 1.1.01  (28july2020)
 *         Updated to allow psolver option - choice of solver for partialling out.
 *         Warning issued if collinearities encountered when partialling out.
 *         Updated to allow full range of VCE options (HAC/AC, 2-way cluster-robust). Now requires ivreg2.
 *         Fixed bug in idstats - wasn't subtracting #FEs for non-cluster VCEs.
+* 1.1.02  (27oct2020)
+*         Fixed reporting bug - wasn't replacing temp names of base category factor variables; was also reporting them as unidentified.
 
 program define ivlasso, eclass					//  sortpreserve handled in _ivlasso
 	syntax [anything] [if] [in] [aw pw],		/// note no "/" after pw
@@ -563,7 +565,7 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 	// and now set xpartial flag
 	local xpartialflag	=("`xpartial_o'"~="") | `pconscount'		//  =1 even if just cons being partialled out
 	*
-	
+
 	*** constant in lasso estimation
 	// Tell lassoshooting if cons has been partialled out or there isn't one in the first place.
 	if `feflag' | `xpartialflag' | (`consflag'==0) {
@@ -633,7 +635,7 @@ program define _ivlasso, eclass sortpreserve				//  sortpreserve is here
 		local `vlist'_t		`r(names)'		//  corresponding tempnames of vars
 	}
 	*
-	
+		
 	*** More useful flags
 	local npxflag		=("`xnotpen_o'"~="")
 	local npzflag		=("`znotpen_o'"~="")
@@ -1846,6 +1848,14 @@ program define DisplayResults, eclass
 	// ID check for PDS is separate - id failure means ALL coefs unidentified
 	local d0ct_l		=diag0cnt(`V_lasso')
 	local d0ct_pl		=diag0cnt(`V_plasso')
+	// counts of 0s on diagonal may refer to (omitted) factor variable base categories
+	// count these and subtract
+	local cnames_ob		: colnames `beta_lasso'
+	local cnames_ob		: subinstr local cnames_ob "b." "b.", all count(local ob_l)
+	local d0ct_l		= `d0ct_l' - `ob_l'
+	local cnames_ob		: colnames `beta_plasso'
+	local cnames_ob	: subinstr local cnames_ob "b." "b.", all count(local ob_pl)
+	local d0ct_pl		= `d0ct_pl' - `ob_pl'
 	local d0ct_pds		=diag0cnt(`V_pds')
 	local dendog_ct		=e(dendog_ct)
 	local zselected_ct	=e(zselected_ct)
@@ -2391,12 +2401,14 @@ program define doregress, eclass sortpreserve
 		}
 		mat `b'	=e(b)
 		mat `V'	=e(V)
-		
+
 		// Fix tempnames if dictionary supplied.
 		if "`dict_o'" ~= "" {
 			matchnames "`varY_t'" "`dict_t'" "`dict_o'"
 			local varY_o	`r(names)'
 			local cnames_t	: colnames `b'					//  tempnames so no FV notation (otherwise b/n/o would get inserted!)
+			// but note that o. gets inserted if a variable was dropped, so need to strip it out
+			local cnames_t	: subinstr local cnames_t "o." "", all
 			matchnames "`cnames_t'" "`dict_t'" "`dict_o'"
 			local cnames_o	`r(names)'
 			mat colnames `b' = `cnames_o'
