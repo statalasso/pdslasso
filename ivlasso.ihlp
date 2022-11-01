@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 1.0.13  31july2020}{...}
+{* *! version 1.0.14  1nov2022}{...}
 {hline}
 {cmd:help pdslasso, help ivlasso}{right: pdslasso v1.3}
 {hline}
@@ -843,7 +843,7 @@ Please check our website {browse "https://statalasso.github.io/"} for more infor
 {pstd}
 {opt pdslasso}/{opt ivlasso} require installation of the {helpb lassopack} package.
 To get the latest stable versions of {helpb lassopack} and {opt pdslasso}/{opt ivlasso} from our website, 
-check the installation instructions at {browse "https://statalasso.github.io/installation/"}.
+check the installation instructions at {browse "https://statalasso.github.io/"}.
 We update the website versions more frequently than the SSC version.
 Earlier versions of these programs are also available from the website.
 
