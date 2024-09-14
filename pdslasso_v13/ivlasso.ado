@@ -1,4 +1,4 @@
-*! ivlasso 1.1.02 27oct2020
+*! ivlasso 1.1.03 14sep2024
 *! pdslasso package 1.3 29july2020
 *! authors aa/cbh/ms
 * ivlasso:		main program
@@ -52,8 +52,11 @@
 *         Warning issued if collinearities encountered when partialling out.
 *         Updated to allow full range of VCE options (HAC/AC, 2-way cluster-robust). Now requires ivreg2.
 *         Fixed bug in idstats - wasn't subtracting #FEs for non-cluster VCEs.
-* 1.1.02  (27oct2020)
-*         Fixed reporting bug - wasn't replacing temp names of base category factor variables; was also reporting them as unidentified.
+* 1.1.02  (20aug2020/14sep2024)
+*         Added check for whether ranktest is installed.
+* 1.1.03  (27oct2020/14sep2024)
+*         Fixed reporting bug - wasn't replacing temp names of base category factor variables;
+*         was also reporting them as unidentified.
 
 program define ivlasso, eclass					//  sortpreserve handled in _ivlasso
 	syntax [anything] [if] [in] [aw pw],		/// note no "/" after pw
@@ -95,6 +98,14 @@ program define ivlasso, eclass					//  sortpreserve handled in _ivlasso
 			di as err "Error: `cmdname' requires ivreg2 to run"
 			di as err "To install, from within Stata type " _c
 			di in smcl "{stata ssc install ivreg2 :ssc install ivreg2}"
+			exit 601
+		}
+		// as is ranktest
+		cap findfile ranktest.ado
+		if _rc != 0 {
+			di as err "Error: `cmdname' requires ranktest to run"
+			di as err "To install, from within Stata type " _c
+			di in smcl "{stata ssc install ranktest :ssc install ranktest}"
 			exit 601
 		}
 		mata: s_ivparse("`anything'")
